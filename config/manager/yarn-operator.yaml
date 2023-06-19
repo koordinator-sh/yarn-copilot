@@ -1,0 +1,89 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    control-plane: koordinator
+  name: koordinator-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: koord-yarn-operator
+  namespace: koordinator-system
+  labels:
+    koord-app: koord-yarn-operator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      koord-app: koord-yarn-operator
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        koord-app: koord-yarn-operator
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: koord-app
+                      operator: In
+                      values:
+                        - koord-yarn-operator
+                topologyKey: kubernetes.io/hostname
+              weight: 100
+      containers:
+        - args:
+            - --enable-leader-election
+            - --metrics-addr=:8080
+            - --health-probe-addr=:8000
+            - --logtostderr=true
+            - --leader-election-namespace=koordinator-system
+            - --v=4
+          command:
+            - /koord-yarn-operator
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  apiVersion: v1
+                  fieldPath: metadata.namespace
+            - name: HADOOP_CONF_DIR
+              value: /etc/hadoop-conf
+          image: registry.cn-beijing.aliyuncs.com/koordinator-sh/koord-manager:add-controller-9df3e34
+          imagePullPolicy: Always
+          name: yarn-operator
+          ports:
+            - containerPort: 9876
+              name: webhook-server
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+            - containerPort: 8000
+              name: health
+              protocol: TCP
+          resources:
+            limits:
+              cpu: "1"
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+          - name: yarn-config-volume
+            mountPath: /etc/hadoop-conf
+      volumes:
+        - name: yarn-config-volume
+          configMap:
+            name: yarn-config
+      restartPolicy: Always
+      serviceAccountName: koord-yarn-operator
+      terminationGracePeriodSeconds: 10

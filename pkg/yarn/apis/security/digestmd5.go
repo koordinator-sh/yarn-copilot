@@ -26,7 +26,7 @@ import (
 	"log"
 	"strings"
 
-	hadoop_common "github.com/koordinator-sh/goyarn/apis/proto/hadoopcommon"
+	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
 )
 
 func getChallengeParams(challenge string) (map[string]string, error) {
@@ -121,7 +121,10 @@ func generateChallengeReponse(username string, password string, protocol string,
 	//generate a response nonce
 	count := 30
 	nonceBuffer := make([]byte, count)
-	rand.Read(nonceBuffer)
+	_, err := rand.Read(nonceBuffer)
+	if err != nil {
+		return "", err
+	}
 	encodedNonce := base64.StdEncoding.EncodeToString(nonceBuffer)
 	buffer = append(buffer, "cnonce=", quote, encodedNonce, quote, comma)
 

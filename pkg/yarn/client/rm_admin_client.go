@@ -17,8 +17,8 @@ limitations under the License.
 package client
 
 import (
-	yarnserver "github.com/koordinator-sh/goyarn/apis/proto/hadoopyarn/server"
-	yarnconf "github.com/koordinator-sh/goyarn/config"
+	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
+	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
 type YarnAdminClient struct {

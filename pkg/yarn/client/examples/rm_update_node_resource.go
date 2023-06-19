@@ -20,10 +20,10 @@ import (
 	"log"
 	"os"
 
-	"github.com/koordinator-sh/goyarn/apis/proto/hadoopyarn"
-	yarnserver "github.com/koordinator-sh/goyarn/apis/proto/hadoopyarn/server"
-	yarnclient "github.com/koordinator-sh/goyarn/client"
-	yarnconf "github.com/koordinator-sh/goyarn/config"
+	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
+	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
+	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
 func main() {
