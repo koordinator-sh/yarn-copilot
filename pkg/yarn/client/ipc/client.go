@@ -26,12 +26,13 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/golang/protobuf/proto"
 	gouuid "github.com/nu7hatch/gouuid"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 
-	yarnauth "github.com/koordinator-sh/goyarn/apis/auth"
-	hadoop_common "github.com/koordinator-sh/goyarn/apis/proto/hadoopcommon"
-	"github.com/koordinator-sh/goyarn/apis/security"
+	yarnauth "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
+	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
+	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/security"
 )
 
 type Client struct {
@@ -56,7 +57,7 @@ type call struct {
 	procedure  proto.Message
 	request    proto.Message
 	response   proto.Message
-	err        *error
+	// err        *error
 	retryCount int32
 }
 
@@ -147,7 +148,10 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 			authProtocol = yarnauth.AUTH_PROTOCOL_SASL
 		}
 
-		writeConnectionHeader(con, authProtocol)
+		err := writeConnectionHeader(con, authProtocol)
+		if err != nil {
+			return nil, err
+		}
 
 		if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
 			log.Println("attempting SASL negotiation.")
@@ -161,7 +165,10 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 			log.Println("no usable tokens. proceeding without auth.")
 		}
 
-		writeConnectionContext(c, con, connectionId, authProtocol)
+		err = writeConnectionContext(c, con, connectionId, authProtocol)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return con, nil
@@ -180,7 +187,10 @@ func setupConnection(c *Client) (*connection, error) {
 	// TODO: Ping thread
 
 	// Set tcp no-delay
-	tcpConn.SetNoDelay(c.TCPNoDelay)
+	err = tcpConn.SetNoDelay(c.TCPNoDelay)
+	if err != nil {
+		return nil, err
+	}
 
 	return &connection{tcpConn}, nil
 }
@@ -349,7 +359,7 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 //}
 
 func writeDelimitedBytes(conn *connection, data []byte) error {
-	if _, err := conn.con.Write(proto.EncodeVarint(uint64(len(data)))); err != nil {
+	if _, err := conn.con.Write(protowire.AppendVarint(nil, uint64(len(data)))); err != nil {
 		log.Fatal("conn.con.Write(proto.EncodeVarint(uint64(len(data))))", err)
 		return err
 	}
@@ -417,7 +427,7 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 }
 
 func readDelimited(rawData []byte, msg proto.Message) (int, error) {
-	headerLength, off := proto.DecodeVarint(rawData)
+	headerLength, off := protowire.ConsumeVarint(rawData)
 	if off == 0 {
 		log.Fatal("proto.DecodeVarint(rawData) returned zero")
 		return -1, nil

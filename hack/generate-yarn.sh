@@ -20,7 +20,7 @@ set -o pipefail
 
 GOYARN_PKG_ROOT="github.com/koordinator-sh/goyarn"
 GOYARN_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
-GOYARN_API_PATH="${GOYARN_ROOT}/apis/proto"
+GOYARN_API_PATH="${GOYARN_ROOT}/pkg/yarn/apis/proto"
 YARN_API_FILES="$( find ${GOYARN_API_PATH} -name "*.proto" )"
 echo ">> generate go pkgs for yarn proto files in ${GOYARN_API_PATH}"
 echo ">> api file names: ${YARN_API_FILES}"

@@ -22,7 +22,7 @@ import (
 	"os/user"
 	"sync"
 
-	hadoop_common "github.com/koordinator-sh/goyarn/apis/proto/hadoopcommon"
+	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
 )
 
 /** a (very) basic UserGroupInformation implementation for storing user data/tokens,
@@ -30,7 +30,7 @@ import (
 */
 
 type UserGroupInformation struct {
-	rwMutex    sync.RWMutex
+	// rwMutex    sync.RWMutex
 	userInfo   *hadoop_common.UserInformationProto
 	userTokens map[string]*hadoop_common.TokenProto
 }

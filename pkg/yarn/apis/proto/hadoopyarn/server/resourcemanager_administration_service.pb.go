@@ -18,11 +18,11 @@ package server
 
 import (
 	"encoding/json"
-	proto "github.com/golang/protobuf/proto"
-	gohadoop "github.com/koordinator-sh/goyarn/apis/auth"
-	hadoop_ipc_client "github.com/koordinator-sh/goyarn/client/ipc"
-	yarn_conf "github.com/koordinator-sh/goyarn/config"
+	gohadoop "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
+	hadoop_ipc_client "github.com/koordinator-sh/goyarn/pkg/yarn/client/ipc"
+	yarn_conf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 	uuid "github.com/nu7hatch/gouuid"
+	"google.golang.org/protobuf/proto"
 	"math"
 )
 

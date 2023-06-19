@@ -27,9 +27,9 @@ import (
 
 var (
 	CORE_DEFAULT Resource = Resource{"core-default.xml", false}
-	CORE_SITE    Resource = Resource{"core-site.xml", true}
+	CORE_SITE    Resource = Resource{"core-site.xml", false}
 	HDFS_DEFAULT Resource = Resource{"hdfs-default.xml", false}
-	HDFS_SITE    Resource = Resource{"hdfs-site.xml", true}
+	HDFS_SITE    Resource = Resource{"hdfs-site.xml", false}
 )
 
 type Resource struct {
@@ -122,7 +122,10 @@ func NewConfigurationResources(hadoopConfDir string, resources []Resource) (Conf
 
 		// Save into configuration
 		for _, kv := range hConf.Properties {
-			c.Set(kv.Name, kv.Value)
+			err = c.Set(kv.Name, kv.Value)
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 
