@@ -29,7 +29,7 @@
 package server
 
 import (
-	hadoopyarn "github.com/koordinator-sh/goyarn/apis/proto/hadoopyarn"
+	hadoopyarn "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	reflect "reflect"

@@ -11,4 +11,4 @@ rm_update_node_resource.go is an example go YARN rpc client of rm-admin: call up
 
 # Run rm_update_node_resource
 change the `host` and `port` to target node id
-$ HADOOP_CONF_DIR=conf go run examples/rm_update_node_resource.go
+$ HADOOP_CONF_DIR=conf go run pkg/yarn/client/examples/rm_update_node_resource.go

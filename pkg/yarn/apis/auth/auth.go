@@ -26,7 +26,7 @@ import (
 	"strings"
 	"unicode"
 
-	hadoop_common "github.com/koordinator-sh/goyarn/apis/proto/hadoopcommon"
+	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
 )
 
 var (
