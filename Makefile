@@ -62,7 +62,7 @@ manifests: controller-gen ## Generate WebhookConfiguration, ClusterRole and Cust
 
 .PHONY: generate
 generate: controller-gen ## Generate code containing DeepCopy, DeepCopyInto, and DeepCopyObject method implementations.
-	$(CONTROLLER_GEN) object:headerFile="$(LICENSE_HEADER_GO)" paths="./api/..."
+	$(CONTROLLER_GEN) object:headerFile="$(LICENSE_HEADER_GO)" paths="./apis/..."
 
 .PHONY: fmt
 fmt: ## Run go fmt against code.
@@ -94,7 +94,7 @@ fast-test: envtest ## Run tests fast.
 ##@ Build
 
 .PHONY: build
-build: build-yarn-copilot build-yarn-operator
+build: build-yarn-operator
 
 .PHONY: build-yarn-copilot
 build-yarn-copilot: ## Build yarn-copilot binary.
