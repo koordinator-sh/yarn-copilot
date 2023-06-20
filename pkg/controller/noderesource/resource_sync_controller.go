@@ -49,9 +49,6 @@ type YARNResourceSyncReconciler struct {
 	client.Client
 }
 
-// +kubebuilder:rbac:groups=core,resources=nodes,verbs=get;list;watch
-// +kubebuilder:rbac:groups=core,resources=configmaps,verbs=get;list;watch
-
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	node := &corev1.Node{}
 	if err := r.Client.Get(context.TODO(), req.NamespacedName, node); err != nil {
