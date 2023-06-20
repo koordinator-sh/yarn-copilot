@@ -83,6 +83,8 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 		klog.Warningf("update batch resource to yarn node %v:%v failed, error %v", yarnNodeName, yarnNodePort, err)
 		return ctrl.Result{Requeue: true}, err
 	}
+	klog.V(4).Infof("update batch resource to yarn node %v:%v finish, cpu-core %v, memory-mb %v",
+		yarnNodeName, yarnNodePort, batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
 	return ctrl.Result{}, nil
 }
 
