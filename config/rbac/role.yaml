@@ -3,7 +3,7 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   creationTimestamp: null
-  name: koord-yarn-operator
+  name: manager-role
 rules:
 - apiGroups:
   - ""
@@ -13,18 +13,6 @@ rules:
   - get
   - list
   - watch
-  - create
-  - update
-- apiGroups:
-    - ""
-  resources:
-    - events
-  verbs:
-    - get
-    - list
-    - watch
-    - create
-    - update
 - apiGroups:
   - ""
   resources:
@@ -33,30 +21,3 @@ rules:
   - get
   - list
   - watch
-- apiGroups:
-    - ""
-  resources:
-    - pods
-  verbs:
-    - get
-    - list
-    - watch
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  namespace: koordinator-system
-  name: koord-yarn-operator
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: koord-yarn-operator-rolebinding
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: koord-yarn-operator
-subjects:
-  - kind: ServiceAccount
-    name: koord-yarn-operator
-    namespace: koordinator-system
