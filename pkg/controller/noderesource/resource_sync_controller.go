@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -30,7 +31,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"strconv"
-	"strings"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
@@ -40,9 +40,11 @@ import (
 )
 
 const (
-	Name = "yarnresource"
+	Name          = "yarnresource"
+	YarnNamespace = "yarn"
 
 	yarnNodeNameAnnotation = "node.yarn.koordinator.sh"
+	yarnNodeIdAnnotation   = "yarn.hadoop.apache.org/node-id"
 )
 
 type YARNResourceSyncReconciler struct {
@@ -51,6 +53,7 @@ type YARNResourceSyncReconciler struct {
 
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
 	node := &corev1.Node{}
+
 	if err := r.Client.Get(context.TODO(), req.NamespacedName, node); err != nil {
 		if errors.IsNotFound(err) {
 			klog.V(3).Infof("skip for node %v not found", req.Name)
@@ -60,7 +63,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	yarnNodeName, yarnNodePort, err := getYARNNodeID(node)
+	yarnNodeName, yarnNodePort, err := r.getYARNNodeID(node)
 	if err != nil {
 		klog.Warningf("fail to parse yarn node name for %v, error %v", node.Name, err)
 		return ctrl.Result{}, nil
@@ -102,15 +105,49 @@ func (r *YARNResourceSyncReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func getYARNNodeID(node *corev1.Node) (string, int32, error) {
+func (r *YARNResourceSyncReconciler) getYARNNodeIDWithPodAnno(node *corev1.Node) (string, int32, error) {
+	podList := &corev1.PodList{}
+	opts := []client.ListOption{
+		client.InNamespace(YarnNamespace),
+		client.MatchingLabels{"app.kubernetes.io/component": "node-manager"},
+	}
+
+	ctx := context.TODO()
+	if err := r.Client.List(ctx, podList, opts...); err != nil {
+		return "", 0, fmt.Errorf("get %v pods failed with error %v", YarnNamespace, err)
+	}
+	for _, pod := range podList.Items {
+		if pod.Spec.NodeName != node.Name {
+			continue
+		}
+		podAnnoNodeId, exists := pod.Annotations[yarnNodeIdAnnotation]
+		if !exists {
+			continue
+		}
+		tokens := strings.Split(podAnnoNodeId, ":")
+		if len(tokens) != 2 {
+			continue
+		}
+		port, err := strconv.Atoi(tokens[1])
+		if err != nil {
+			continue
+		}
+		return tokens[0], int32(port), nil
+	}
+	return "", 0, fmt.Errorf("node %s doesn't have %s pods, just ignored.", node.Name, YarnNamespace)
+}
+
+func (r *YARNResourceSyncReconciler) getYARNNodeID(node *corev1.Node) (string, int32, error) {
 	if node == nil || node.Annotations == nil {
 		return "", 0, nil
 	}
+
 	// TODO get yarn node name from node manager pod attr
 	nodeID, exist := node.Annotations[yarnNodeNameAnnotation]
 	if !exist {
-		return "", 0, nil
+		return r.getYARNNodeIDWithPodAnno(node)
 	}
+
 	attrs := strings.Split(nodeID, ":")
 	if len(attrs) != 2 {
 		return "", 0, fmt.Errorf("illegal format during parse yarn node name %v for node %v", nodeID, node.Name)
