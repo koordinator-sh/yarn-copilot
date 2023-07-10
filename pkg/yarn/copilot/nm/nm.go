@@ -9,13 +9,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/utils"
-
+	"github.com/go-resty/resty/v2"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
 	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"k8s.io/klog/v2"
+
+	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/utils"
 )
 
 type NodeMangerOperator struct {
