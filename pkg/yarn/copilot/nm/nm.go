@@ -19,6 +19,10 @@ import (
 	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/utils"
 )
 
+const (
+	MemoryMoveChargeAtImmigrateName = "memory.move_charge_at_immigrate"
+)
+
 type NodeMangerOperator struct {
 	CgroupRoot string
 	CgroupPath string
@@ -197,7 +201,8 @@ func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
 		klog.Error("fail to create memory dir: %s, error: %s", memCgroupPath, err.Error())
 		return
 	}
-	if _, err := system.CommonFileWriteIfDifferent(filepath.Join(memCgroupPath, system.MemoryMoveChargeAtImmigrateName), "3"); err != nil {
+
+	if _, err := system.CommonFileWriteIfDifferent(filepath.Join(memCgroupPath, MemoryMoveChargeAtImmigrateName), "3"); err != nil {
 		klog.Error(err)
 		return
 	}
