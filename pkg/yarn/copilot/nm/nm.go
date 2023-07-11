@@ -201,6 +201,7 @@ func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
 		klog.Error("fail to create memory dir: %s, error: %s", memCgroupPath, err.Error())
 		return
 	}
+
 	if _, err := system.CommonFileWriteIfDifferent(filepath.Join(memCgroupPath, MemoryMoveChargeAtImmigrateName), "3"); err != nil {
 		klog.Error(err)
 		return
