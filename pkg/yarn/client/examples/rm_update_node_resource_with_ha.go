@@ -18,24 +18,20 @@ package main
 
 import (
 	"log"
-	"os"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
 	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
-	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
 func main() {
-	// Create YarnConfiguration
-	conf, _ := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"))
+	// Create YarnClient
+	yarnClient, _ := yarnclient.CreateYARNClient()
+	yarnClient.Initialize()
 
-	// Create YarnAdminClient
-	yarnAdminClient, _ := yarnclient.CreateYarnAdminClient(conf, nil)
-
-	host := "core-1-3.c-f55b4f620febfd69.cn-zhangjiakou.emr.aliyuncs.com"
+	host := "0.0.0.0"
 	port := int32(8041)
-	vCores := int32(100)
+	vCores := int32(101)
 	memoryMB := int64(10240)
 	request := &yarnserver.UpdateNodeResourceRequestProto{
 		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
@@ -53,10 +49,10 @@ func main() {
 			},
 		},
 	}
-	response, err := yarnAdminClient.UpdateNodeResource(request)
+	response, err := yarnClient.UpdateNodeResource(request)
 
 	if err != nil {
-		log.Fatal("yarnAdminClient.UpdateNodeResource ", err)
+		log.Fatal("yarnClient.UpdateNodeResource ", err)
 	}
 
 	log.Printf("UpdateNodeResource response %v", response)

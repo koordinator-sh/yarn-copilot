@@ -14,16 +14,19 @@
  limitations under the License.
 */
 
-package server
+package service
 
 import (
 	"encoding/json"
-	gohadoop "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
-	hadoop_ipc_client "github.com/koordinator-sh/goyarn/pkg/yarn/client/ipc"
-	yarn_conf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
+	"math"
+
 	uuid "github.com/nu7hatch/gouuid"
 	"google.golang.org/protobuf/proto"
-	"math"
+
+	gohadoop "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
+	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
+	hadoop_ipc_client "github.com/koordinator-sh/goyarn/pkg/yarn/client/ipc"
+	yarn_conf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
 // Reference proto, json, and math imports to suppress error if they are not otherwise used.
@@ -37,21 +40,34 @@ func init() {
 }
 
 type ResourceManagerAdministrationProtocolService interface {
-	UpdateNodeResource(in *UpdateNodeResourceRequestProto, out *UpdateNodeResourceResponseProto) error
+	UpdateNodeResource(in *yarnserver.UpdateNodeResourceRequestProto, out *yarnserver.UpdateNodeResourceResponseProto) error
 }
 
 type ResourceManagerAdministrationProtocolServiceClient struct {
 	*hadoop_ipc_client.Client
 }
 
-func (c *ResourceManagerAdministrationProtocolServiceClient) UpdateNodeResource(in *UpdateNodeResourceRequestProto, out *UpdateNodeResourceResponseProto) error {
+func (c *ResourceManagerAdministrationProtocolServiceClient) UpdateNodeResource(in *yarnserver.UpdateNodeResourceRequestProto, out *yarnserver.UpdateNodeResourceResponseProto) error {
 	return c.Call(gohadoop.GetCalleeRPCRequestHeaderProto(&RESOURCE_MANAGER_ADMIN_PROTOCOL), in, out)
 }
 
-func DialResourceManagerAdministrationProtocolService(conf yarn_conf.YarnConfiguration) (ResourceManagerAdministrationProtocolService, error) {
-	clientId, _ := uuid.NewV4()
-	ugi, _ := gohadoop.CreateSimpleUGIProto()
-	serverAddress, _ := conf.GetRMAdminAddress()
+func DialResourceManagerAdministrationProtocolService(conf yarn_conf.YarnConfiguration, rmAddress *string) (ResourceManagerAdministrationProtocolService, error) {
+	clientId, err := uuid.NewV4()
+	if err != nil {
+		return nil, err
+	}
+	ugi, err := gohadoop.CreateSimpleUGIProto()
+	if err != nil {
+		return nil, err
+	}
+
+	var serverAddress string
+	if rmAddress != nil {
+		serverAddress = *rmAddress
+	} else if serverAddress, err = conf.GetRMAdminAddress(); err != nil {
+		return nil, err
+	}
+
 	c := &hadoop_ipc_client.Client{ClientId: clientId, Ugi: ugi, ServerAddress: serverAddress}
 	return &ResourceManagerAdministrationProtocolServiceClient{c}, nil
 }

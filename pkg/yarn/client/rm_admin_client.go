@@ -18,15 +18,16 @@ package client
 
 import (
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
+	yarnservice "github.com/koordinator-sh/goyarn/pkg/yarn/apis/service"
 	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
 type YarnAdminClient struct {
-	client yarnserver.ResourceManagerAdministrationProtocolService
+	client yarnservice.ResourceManagerAdministrationProtocolService
 }
 
-func CreateYarnAdminClient(conf yarnconf.YarnConfiguration) (*YarnAdminClient, error) {
-	c, err := yarnserver.DialResourceManagerAdministrationProtocolService(conf)
+func CreateYarnAdminClient(conf yarnconf.YarnConfiguration, rmAddress *string) (*YarnAdminClient, error) {
+	c, err := yarnservice.DialResourceManagerAdministrationProtocolService(conf, rmAddress)
 	return &YarnAdminClient{client: c}, err
 }
 

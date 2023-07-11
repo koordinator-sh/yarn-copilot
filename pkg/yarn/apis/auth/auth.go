@@ -20,11 +20,12 @@ package auth
 import (
 	"bytes"
 	"encoding/binary"
-	"log"
 	"os/user"
 	"runtime"
 	"strings"
 	"unicode"
+
+	"k8s.io/klog/v2"
 
 	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
 )
@@ -106,7 +107,7 @@ func CreateSimpleUGIProto() (*hadoop_common.UserInformationProto, error) {
 	// Figure the current user-name
 	var username string
 	if user, err := user.Current(); err != nil {
-		log.Fatal("user.Current", err)
+		klog.Warningf("user.Current", err)
 		return nil, err
 	} else {
 		username = user.Username

@@ -19,7 +19,6 @@ package noderesource
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
@@ -35,7 +34,6 @@ import (
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
 	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
-	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 	"github.com/koordinator-sh/koordinator/apis/extension"
 )
 
@@ -49,6 +47,7 @@ const (
 
 type YARNResourceSyncReconciler struct {
 	client.Client
+	yarnClient *yarnclient.YARNClient
 }
 
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -82,18 +81,26 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	}
 
 	// TODO control update frequency
-	if err := updateYARNNodeResource(yarnNodeName, yarnNodePort, batchCPU, batchMemory); err != nil {
+	if err := r.updateYARNNodeResource(yarnNodeName, yarnNodePort, batchCPU, batchMemory); err != nil {
 		klog.Warningf("update batch resource to yarn node %v:%v failed, error %v", yarnNodeName, yarnNodePort, err)
 		return ctrl.Result{Requeue: true}, err
 	}
-	klog.V(4).Infof("update batch resource to yarn node %v:%v finish, cpu-core %v, memory-mb %v",
-		yarnNodeName, yarnNodePort, batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
+	klog.V(4).Infof("update node %v batch resource to yarn %v:%v finish, cpu-core %v, memory-mb %v",
+		node.Name, yarnNodeName, yarnNodePort, batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
 	return ctrl.Result{}, nil
 }
 
 func Add(mgr ctrl.Manager) error {
+	yarnClient, err := yarnclient.CreateYARNClient()
+	if err != nil {
+		return err
+	}
 	r := &YARNResourceSyncReconciler{
 		Client: mgr.GetClient(),
+		yarnClient: yarnClient,
+	}
+	if err := r.yarnClient.Initialize(); err != nil {
+		return err
 	}
 	return r.SetupWithManager(mgr)
 }
@@ -134,7 +141,7 @@ func (r *YARNResourceSyncReconciler) getYARNNodeIDWithPodAnno(node *corev1.Node)
 		}
 		return tokens[0], int32(port), nil
 	}
-	return "", 0, fmt.Errorf("node %s doesn't have %s pods, just ignored.", node.Name, YarnNamespace)
+	return "", 0, fmt.Errorf("node %s doesn't have %s pods, just ignored", node.Name, YarnNamespace)
 }
 
 func (r *YARNResourceSyncReconciler) getYARNNodeID(node *corev1.Node) (string, int32, error) {
@@ -160,12 +167,7 @@ func (r *YARNResourceSyncReconciler) getYARNNodeID(node *corev1.Node) (string, i
 	return nodeName, int32(nodePort), nil
 }
 
-func updateYARNNodeResource(yarnNodeName string, yarnNodePort int32, cpuMilli, memory resource.Quantity) error {
-	// TODO use flags for conf dir config
-	conf, _ := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"))
-	// TODO keep client alive instead of create every time
-	yarnAdminClient, _ := yarnclient.CreateYarnAdminClient(conf)
-
+func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNodeName string, yarnNodePort int32, cpuMilli, memory resource.Quantity) error {
 	// convert to yarn format
 	vcores := int32(cpuMilli.ScaledValue(resource.Kilo))
 	memoryMB := memory.ScaledValue(resource.Mega)
@@ -186,6 +188,9 @@ func updateYARNNodeResource(yarnNodeName string, yarnNodePort int32, cpuMilli, m
 			},
 		},
 	}
-	_, err := yarnAdminClient.UpdateNodeResource(request)
-	return err
+	if resp, err := r.yarnClient.UpdateNodeResource(request); err != nil {
+		initErr := r.yarnClient.Reinitialize()
+		return fmt.Errorf("UpdateNodeResource resp %v, error %v, reinitialize error %v", resp, err, initErr)
+	}
+	return nil
 }

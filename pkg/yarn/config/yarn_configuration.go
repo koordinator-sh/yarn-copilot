@@ -17,6 +17,11 @@ limitations under the License.
 
 package conf
 
+import (
+	"fmt"
+	"strings"
+)
+
 var (
 	YARN_DEFAULT Resource = Resource{"yarn-default.xml", false}
 	YARN_SITE    Resource = Resource{"yarn-site.xml", true}
@@ -26,13 +31,17 @@ const (
 	YARN_PREFIX                      = "yarn."
 	RM_PREFIX                        = YARN_PREFIX + "resourcemanager."
 	RM_ADDRESS                       = RM_PREFIX + "address"
-	DEFAULT_RM_ADDRESS               = "0.0.0.0:8032"
 	RM_SCHEDULER_ADDRESS             = RM_PREFIX + "scheduler.address"
 	RM_ADMIN_ADDRESS                 = RM_PREFIX + "admin.address"
+	RM_HA_ENABLED                 = RM_PREFIX + "ha.enabled"
+	RM_HA_RM_IDS                 = RM_PREFIX + "ha.rm-ids"
+	RM_AM_EXPIRY_INTERVAL_MS         = YARN_PREFIX + "am.liveness-monitor.expiry-interval-ms"
+
+	DEFAULT_RM_ADDRESS               = "0.0.0.0:8032"
 	DEFAULT_RM_SCHEDULER_ADDRESS     = "0.0.0.0:8030"
 	DEFAULT_RM_ADMIN_ADDRESS         = "0.0.0.0:8033"
-	RM_AM_EXPIRY_INTERVAL_MS         = YARN_PREFIX + "am.liveness-monitor.expiry-interval-ms"
 	DEFAULT_RM_AM_EXPIRY_INTERVAL_MS = 600000
+	DEFAULT_RM_HA_ENABLED = false
 )
 
 type yarn_configuration struct {
@@ -43,6 +52,9 @@ type YarnConfiguration interface {
 	GetRMAddress() (string, error)
 	GetRMSchedulerAddress() (string, error)
 	GetRMAdminAddress() (string, error)
+	GetRMEnabledHA() (bool, error)
+	GetRMs() ([]string, error)
+	GetRMAddressByID(rmID string) (string, error)
 
 	SetRMAddress(address string) error
 	SetRMSchedulerAddress(address string) error
@@ -72,6 +84,26 @@ func (yarn_conf *yarn_configuration) GetRMSchedulerAddress() (string, error) {
 
 func (yarn_conf *yarn_configuration) GetRMAdminAddress() (string, error) {
 	return yarn_conf.conf.Get(RM_ADMIN_ADDRESS, DEFAULT_RM_ADMIN_ADDRESS)
+}
+
+func (yarn_conf *yarn_configuration) GetRMEnabledHA() (bool, error) {
+	return yarn_conf.conf.GetBool(RM_HA_ENABLED, DEFAULT_RM_HA_ENABLED)
+}
+
+func (yarn_conf *yarn_configuration) GetRMs() ([]string, error) {
+	rmIDs := make([]string, 0)
+	allRMs, err := yarn_conf.conf.Get(RM_HA_RM_IDS, "")
+	if err != nil {
+		return rmIDs, nil
+	}
+	rmIDs = strings.Split(allRMs, ",")
+	return rmIDs, nil
+}
+
+func (yarn_conf *yarn_configuration) GetRMAddressByID(rmID string) (string, error) {
+	// yarn.resourcemanager.admin.address.rm1
+	rmAddrKey := fmt.Sprintf("%v.%v", RM_ADMIN_ADDRESS, rmID)
+	return yarn_conf.conf.Get(rmAddrKey, DEFAULT_RM_ADDRESS)
 }
 
 func (yarn_conf *yarn_configuration) Set(key string, value string) error {
