@@ -96,7 +96,7 @@ func Add(mgr ctrl.Manager) error {
 		return err
 	}
 	r := &YARNResourceSyncReconciler{
-		Client: mgr.GetClient(),
+		Client:     mgr.GetClient(),
 		yarnClient: yarnClient,
 	}
 	if err := r.yarnClient.Initialize(); err != nil {
