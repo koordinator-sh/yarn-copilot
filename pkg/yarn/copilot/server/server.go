@@ -61,7 +61,6 @@ func (y *YarnCopilotServer) Run(ctx context.Context) error {
 			return nil
 		}
 	}
-	return nil
 }
 
 func (y *YarnCopilotServer) Health(ctx *gin.Context) {
