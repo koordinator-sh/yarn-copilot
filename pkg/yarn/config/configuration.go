@@ -20,9 +20,10 @@ package conf
 import (
 	"encoding/xml"
 	"io/ioutil"
-	"log"
 	"os"
 	"strconv"
+
+	"k8s.io/klog/v2"
 )
 
 var (
@@ -40,6 +41,7 @@ type Resource struct {
 type Configuration interface {
 	Get(key string, defaultValue string) (string, error)
 	GetInt(key string, defaultValue int) (int, error)
+	GetBool(key string, defaultValue bool) (bool, error)
 
 	Set(key string, value string) error
 	SetInt(key string, value int) error
@@ -75,6 +77,14 @@ func (conf *configuration) GetInt(key string, defaultValue int) (int, error) {
 	return strconv.Atoi(value)
 }
 
+func (conf *configuration) GetBool(key string, defaultValue bool) (bool, error) {
+	value, exists := conf.Properties[key]
+	if !exists {
+		return defaultValue, nil
+	}
+	return strconv.ParseBool(value)
+}
+
 func (conf *configuration) Set(key string, value string) error {
 	conf.Properties[key] = value
 	return nil
@@ -102,12 +112,12 @@ func NewConfigurationResources(hadoopConfDir string, resources []Resource) (Conf
 			if !resource.Required {
 				continue
 			}
-			log.Fatal("Couldn't open resource: ", err)
+			klog.Warningf("Couldn't open resource: ", err)
 			return nil, err
 		}
 		confData, err := ioutil.ReadAll(conf)
 		if err != nil {
-			log.Fatal("Couldn't read resource: ", err)
+			klog.Warningf("Couldn't read resource: ", err)
 			return nil, err
 		}
 		defer conf.Close()
@@ -116,7 +126,7 @@ func NewConfigurationResources(hadoopConfDir string, resources []Resource) (Conf
 		var hConf hadoopConfiguration
 		err = xml.Unmarshal(confData, &hConf)
 		if err != nil {
-			log.Fatal("Couldn't parse core-site.xml: ", err)
+			klog.Warningf("Couldn't parse core-site.xml: ", err)
 			return nil, err
 		}
 
