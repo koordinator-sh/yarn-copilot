@@ -141,7 +141,7 @@ func (r *YARNResourceSyncReconciler) getYARNNodeIDWithPodAnno(node *corev1.Node)
 		}
 		return tokens[0], int32(port), nil
 	}
-	return "", 0, fmt.Errorf("node %s doesn't have %s pods, just ignored", node.Name, YarnNamespace)
+	return "", 0, nil
 }
 
 func (r *YARNResourceSyncReconciler) getYARNNodeID(node *corev1.Node) (string, int32, error) {
