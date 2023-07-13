@@ -1,3 +1,19 @@
+/*
+Copyright 2022 The Koordinator Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package server
 
 import (
@@ -40,7 +56,10 @@ func (y *YarnCopilotServer) Run(ctx context.Context) error {
 		Handler: e,
 	}
 	sockDir := filepath.Dir(y.unixPath)
-	os.MkdirAll(sockDir, os.ModePerm)
+	err := os.MkdirAll(sockDir, os.ModePerm)
+	if err != nil {
+		klog.Fatal("mkdir for socket failed", err)
+	}
 	if system.FileExists(y.unixPath) {
 		os.Remove(y.unixPath)
 	}
@@ -50,17 +69,20 @@ func (y *YarnCopilotServer) Run(ctx context.Context) error {
 		os.Exit(1)
 	}
 	defer os.Remove(y.unixPath)
-	go server.Serve(listener)
-	for {
-		select {
-		case <-ctx.Done():
-			klog.Info("graceful shutdown")
-			if err := server.Shutdown(ctx); err != nil {
-				klog.Errorf("Server forced to shutdown: %v", err)
-			}
-			return nil
+	go func() {
+		err := server.Serve(listener)
+		if err != nil {
+			klog.Fatal("start serve failed", err)
 		}
+	}()
+
+	<-ctx.Done()
+	klog.Info("graceful shutdown")
+	if err := server.Shutdown(ctx); err != nil {
+		klog.Errorf("Server forced to shutdown: %v", err)
 	}
+	return nil
+
 }
 
 func (y *YarnCopilotServer) Health(ctx *gin.Context) {
@@ -144,5 +166,4 @@ func (y *YarnCopilotServer) KillContainer(ctx *gin.Context) {
 }
 
 func (y *YarnCopilotServer) KillContainerByResource(ctx *gin.Context) {
-	return
 }

@@ -1,3 +1,19 @@
+/*
+Copyright 2022 The Koordinator Authors.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package nm
 
 import (
@@ -10,13 +26,12 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
-	"github.com/opencontainers/runc/libcontainer/cgroups"
 	"k8s.io/klog/v2"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/utils"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
 )
 
 const (
@@ -106,7 +121,7 @@ func (n *NodeMangerOperator) syncMemoryCgroup(stop <-chan struct{}) error {
 func (n *NodeMangerOperator) syncNoneProcCgroup() {
 	klog.V(5).Info("syncNoneProcCgroup")
 	cpuPath := n.GenerateCgroupFullPath(system.CgroupCPUDir)
-	filepath.Walk(cpuPath, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(cpuPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			klog.Warningf("ignore file %s error:%s", path, err.Error())
 			return err
@@ -129,6 +144,9 @@ func (n *NodeMangerOperator) syncNoneProcCgroup() {
 		}
 		return nil
 	})
+	if err != nil {
+		klog.Errorf("walk cpu cgroup dir failed, error %v", err)
+	}
 }
 
 func (n *NodeMangerOperator) syncNMEndpoint() {
@@ -150,7 +168,7 @@ func (n *NodeMangerOperator) syncNMEndpoint() {
 func (n *NodeMangerOperator) syncAllCgroup() {
 	subDirFunc := func(dir string) map[string]struct{} {
 		res := map[string]struct{}{}
-		filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				klog.Warningf("ignore file %s error:%s", path, err.Error())
 				return err
@@ -161,15 +179,18 @@ func (n *NodeMangerOperator) syncAllCgroup() {
 			}
 			return nil
 		})
+		if err != nil {
+			klog.Errorf("walk cpu cgroup dir failed, error %v", err)
+		}
 		return res
 	}
 	cpuList := subDirFunc(filepath.Join(n.CgroupRoot, system.CgroupCPUDir, n.CgroupPath))
 	memList := subDirFunc(filepath.Join(n.CgroupRoot, system.CgroupMemDir, n.CgroupPath))
 	toCreate, toDelete := utils.DiffMap(cpuList, memList)
-	for path, _ := range toCreate {
+	for path := range toCreate {
 		n.createMemoryCgroup(path)
 	}
-	for path, _ := range toDelete {
+	for path := range toDelete {
 		n.removeMemoryCgroup(path)
 	}
 }
@@ -211,7 +232,7 @@ func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
 		return
 	}
 	cpuCgroupPath := filepath.Join(n.CgroupRoot, system.CgroupCPUDir, n.CgroupPath, basename)
-	pids, err := cgroups.GetPids(cpuCgroupPath)
+	pids, err := utils.GetPids(cpuCgroupPath)
 	if err != nil {
 		klog.Error(err)
 		return
@@ -261,7 +282,7 @@ func (n *NodeMangerOperator) KillContainer(containerID string) error {
 
 func (n *NodeMangerOperator) getProcessGroupID(containerID string) int {
 	containerCgroupPath := filepath.Join(n.CgroupRoot, "cpu", n.CgroupPath, containerID)
-	pids, err := cgroups.GetPids(containerCgroupPath)
+	pids, err := utils.GetPids(containerCgroupPath)
 	if err != nil {
 		klog.Error(err)
 		return 0

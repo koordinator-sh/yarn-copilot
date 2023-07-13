@@ -28,20 +28,20 @@ var (
 )
 
 const (
-	YARN_PREFIX                      = "yarn."
-	RM_PREFIX                        = YARN_PREFIX + "resourcemanager."
-	RM_ADDRESS                       = RM_PREFIX + "address"
-	RM_SCHEDULER_ADDRESS             = RM_PREFIX + "scheduler.address"
-	RM_ADMIN_ADDRESS                 = RM_PREFIX + "admin.address"
-	RM_HA_ENABLED                 = RM_PREFIX + "ha.enabled"
-	RM_HA_RM_IDS                 = RM_PREFIX + "ha.rm-ids"
-	RM_AM_EXPIRY_INTERVAL_MS         = YARN_PREFIX + "am.liveness-monitor.expiry-interval-ms"
+	YARN_PREFIX              = "yarn."
+	RM_PREFIX                = YARN_PREFIX + "resourcemanager."
+	RM_ADDRESS               = RM_PREFIX + "address"
+	RM_SCHEDULER_ADDRESS     = RM_PREFIX + "scheduler.address"
+	RM_ADMIN_ADDRESS         = RM_PREFIX + "admin.address"
+	RM_HA_ENABLED            = RM_PREFIX + "ha.enabled"
+	RM_HA_RM_IDS             = RM_PREFIX + "ha.rm-ids"
+	RM_AM_EXPIRY_INTERVAL_MS = YARN_PREFIX + "am.liveness-monitor.expiry-interval-ms"
 
 	DEFAULT_RM_ADDRESS               = "0.0.0.0:8032"
 	DEFAULT_RM_SCHEDULER_ADDRESS     = "0.0.0.0:8030"
 	DEFAULT_RM_ADMIN_ADDRESS         = "0.0.0.0:8033"
 	DEFAULT_RM_AM_EXPIRY_INTERVAL_MS = 600000
-	DEFAULT_RM_HA_ENABLED = false
+	DEFAULT_RM_HA_ENABLED            = false
 )
 
 type yarn_configuration struct {
