@@ -21,15 +21,13 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"log"
-	"net"
-	"strings"
-	"sync"
-
 	gouuid "github.com/nu7hatch/gouuid"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"k8s.io/klog/v2"
+	"log"
+	"net"
+	"strings"
 
 	yarnauth "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
 	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
@@ -104,13 +102,16 @@ func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Me
 	// Read & return response
 	err = c.readResponse(conn, &rpcCall)
 
+	// TODO keep connection alive for reuse
+	conn.con.Close()
+
 	return err
 }
 
-var connectionPool = struct {
-	sync.RWMutex
-	connections map[connection_id]*connection
-}{connections: make(map[connection_id]*connection)}
+//var connectionPool = struct {
+//	sync.RWMutex
+//	connections map[connection_id]*connection
+//}{connections: make(map[connection_id]*connection)}
 
 func findUsableTokenForService(service string) (*hadoop_common.TokenProto, bool) {
 	userTokens := security.GetCurrentUser().GetUserTokens()
@@ -131,52 +132,52 @@ func findUsableTokenForService(service string) (*hadoop_common.TokenProto, bool)
 
 func getConnection(c *Client, connectionId *connection_id) (*connection, error) {
 	// Try to re-use an existing connection
-	connectionPool.RLock()
-	con := connectionPool.connections[*connectionId]
-	connectionPool.RUnlock()
+	//connectionPool.RLock()
+	//con := connectionPool.connections[*connectionId]
+	//connectionPool.RUnlock()
 
 	// If necessary, create a new connection and save it in the connection-pool
-	var err error
-	if con == nil {
-		con, err = setupConnection(c)
-		if err != nil {
-			klog.Warningf("Couldn't setup connection: ", err)
-			return nil, err
-		}
-
-		connectionPool.Lock()
-		connectionPool.connections[*connectionId] = con
-		connectionPool.Unlock()
-
-		var authProtocol yarnauth.AuthProtocol = yarnauth.AUTH_PROTOCOL_NONE
-
-		if _, found := findUsableTokenForService(c.ServerAddress); found {
-			log.Printf("found token for service: %s", c.ServerAddress)
-			authProtocol = yarnauth.AUTH_PROTOCOL_SASL
-		}
-
-		err := writeConnectionHeader(con, authProtocol)
-		if err != nil {
-			return nil, err
-		}
-
-		if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
-			log.Println("attempting SASL negotiation.")
-
-			if err = negotiateSimpleTokenAuth(c, con); err != nil {
-				klog.Warningf("failed to complete SASL negotiation!")
-				return nil, err
-			}
-
-		} else {
-			log.Println("no usable tokens. proceeding without auth.")
-		}
-
-		err = writeConnectionContext(c, con, connectionId, authProtocol)
-		if err != nil {
-			return nil, err
-		}
+	//var err error
+	//if con == nil {
+	con, err := setupConnection(c)
+	if err != nil {
+		klog.Warningf("Couldn't setup connection: ", err)
+		return nil, err
 	}
+
+	//connectionPool.Lock()
+	//connectionPool.connections[*connectionId] = con
+	//connectionPool.Unlock()
+
+	var authProtocol yarnauth.AuthProtocol = yarnauth.AUTH_PROTOCOL_NONE
+
+	if _, found := findUsableTokenForService(c.ServerAddress); found {
+		log.Printf("found token for service: %s", c.ServerAddress)
+		authProtocol = yarnauth.AUTH_PROTOCOL_SASL
+	}
+
+	err = writeConnectionHeader(con, authProtocol)
+	if err != nil {
+		return nil, err
+	}
+
+	if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
+		log.Println("attempting SASL negotiation.")
+
+		if err = negotiateSimpleTokenAuth(c, con); err != nil {
+			klog.Warningf("failed to complete SASL negotiation!")
+			return nil, err
+		}
+
+	} else {
+		log.Println("no usable tokens. proceeding without auth.")
+	}
+
+	err = writeConnectionContext(c, con, connectionId, authProtocol)
+	if err != nil {
+		return nil, err
+	}
+	//}
 
 	return con, nil
 }
