@@ -54,6 +54,7 @@ type YarnConfiguration interface {
 	GetRMAdminAddress() (string, error)
 	GetRMEnabledHA() (bool, error)
 	GetRMs() ([]string, error)
+	GetRMAdminAddressByID(rmID string) (string, error)
 	GetRMAddressByID(rmID string) (string, error)
 
 	SetRMAddress(address string) error
@@ -100,9 +101,15 @@ func (yarn_conf *yarn_configuration) GetRMs() ([]string, error) {
 	return rmIDs, nil
 }
 
-func (yarn_conf *yarn_configuration) GetRMAddressByID(rmID string) (string, error) {
+func (yarn_conf *yarn_configuration) GetRMAdminAddressByID(rmID string) (string, error) {
 	// yarn.resourcemanager.admin.address.rm1
 	rmAddrKey := fmt.Sprintf("%v.%v", RM_ADMIN_ADDRESS, rmID)
+	return yarn_conf.conf.Get(rmAddrKey, DEFAULT_RM_ADMIN_ADDRESS)
+}
+
+func (yarn_conf *yarn_configuration) GetRMAddressByID(rmID string) (string, error) {
+	// yarn.resourcemanager.address.rm1
+	rmAddrKey := fmt.Sprintf("%v.%v", RM_ADDRESS, rmID)
 	return yarn_conf.conf.Get(rmAddrKey, DEFAULT_RM_ADDRESS)
 }
 

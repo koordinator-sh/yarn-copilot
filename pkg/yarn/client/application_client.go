@@ -17,22 +17,23 @@ limitations under the License.
 package client
 
 import (
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
+	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnservice "github.com/koordinator-sh/goyarn/pkg/yarn/apis/service"
+	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
-type YarnHAClient struct {
-	client yarnservice.HAServiceProtocolService
+type YarnApplicationClient struct {
+	client yarnservice.ApplicationClientProtocolService
 }
 
-func CreateYarnHAClient(rmAddress string) (*YarnHAClient, error) {
-	c, err := yarnservice.DialHAServiceProtocolService(rmAddress)
-	return &YarnHAClient{client: c}, err
+func CreateYarnApplicationClient(conf yarnconf.YarnConfiguration, rmAddress *string) (*YarnApplicationClient, error) {
+	c, err := yarnservice.DialApplicationClientProtocolService(conf, rmAddress)
+	return &YarnApplicationClient{client: c}, err
 }
 
-func (c *YarnHAClient) GetServiceStatus(request *hadoopcommon.GetServiceStatusRequestProto) (*hadoopcommon.GetServiceStatusResponseProto, error) {
-	response := &hadoopcommon.GetServiceStatusResponseProto{}
-	err := c.client.GetServiceStatus(request, response)
+func (c *YarnApplicationClient) GetClusterNode(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
+	response := &hadoopyarn.GetClusterNodesResponseProto{}
+	err := c.client.GetClusterNodes(request, response)
 	if err != nil {
 		return nil, err
 	}

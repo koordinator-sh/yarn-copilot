@@ -38,13 +38,13 @@ func main() {
 	}
 
 	for _, rmID := range rmIDs {
-		rmAddr, err := conf.GetRMAddressByID(rmID)
+		rmAddr, err := conf.GetRMAdminAddressByID(rmID)
 		if err != nil {
-			log.Fatal("GetRMAddressByID", err)
+			log.Fatal("GetRMAdminAddressByID", err)
 		}
 
 		// Create YarnAdminClient
-		yarnHAClient, _ := yarnclient.CreateYarrHAClient(rmAddr)
+		yarnHAClient, _ := yarnclient.CreateYarnHAClient(rmAddr)
 
 		request := &hadoopcommon.GetServiceStatusRequestProto{}
 		response, err := yarnHAClient.GetServiceStatus(request)

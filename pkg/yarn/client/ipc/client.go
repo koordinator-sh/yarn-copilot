@@ -21,17 +21,22 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"net"
+	"strings"
+	"time"
+
 	gouuid "github.com/nu7hatch/gouuid"
 	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"k8s.io/klog/v2"
-	"log"
-	"net"
-	"strings"
 
 	yarnauth "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
 	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/security"
+)
+
+const (
+	connDefaultTimeout = 10 * time.Second
 )
 
 type Client struct {
@@ -85,7 +90,7 @@ func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Me
 	}
 
 	// Get connection to server
-	//log.Println("Connecting...", c)
+	//klog.V(4).Infof("Connecting...", c)
 	conn, err := getConnection(c, &connectionId)
 	if err != nil {
 		return err
@@ -116,7 +121,7 @@ func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Me
 func findUsableTokenForService(service string) (*hadoop_common.TokenProto, bool) {
 	userTokens := security.GetCurrentUser().GetUserTokens()
 
-	log.Printf("looking for token for service: %s\n", service)
+	klog.V(4).Infof("looking for token for service: %s\n", service)
 
 	if len(userTokens) == 0 {
 		return nil, false
@@ -152,7 +157,7 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 	var authProtocol yarnauth.AuthProtocol = yarnauth.AUTH_PROTOCOL_NONE
 
 	if _, found := findUsableTokenForService(c.ServerAddress); found {
-		log.Printf("found token for service: %s", c.ServerAddress)
+		klog.V(4).Infof("found token for service: %s", c.ServerAddress)
 		authProtocol = yarnauth.AUTH_PROTOCOL_SASL
 	}
 
@@ -162,7 +167,7 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 	}
 
 	if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
-		log.Println("attempting SASL negotiation.")
+		klog.V(4).Infof("attempting SASL negotiation.")
 
 		if err = negotiateSimpleTokenAuth(c, con); err != nil {
 			klog.Warningf("failed to complete SASL negotiation!")
@@ -170,7 +175,7 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 		}
 
 	} else {
-		log.Println("no usable tokens. proceeding without auth.")
+		klog.V(4).Infof("no usable tokens. proceeding without auth.")
 	}
 
 	err = writeConnectionContext(c, con, connectionId, authProtocol)
@@ -183,13 +188,18 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 }
 
 func setupConnection(c *Client) (*connection, error) {
-	addr, _ := net.ResolveTCPAddr("tcp", c.ServerAddress)
-	tcpConn, err := net.DialTCP("tcp", nil, addr)
+	d := net.Dialer{Timeout: connDefaultTimeout}
+	conn, err := d.Dial("tcp", c.ServerAddress)
 	if err != nil {
-		log.Println("error: ", err)
+		klog.V(4).Infof("error: ", err)
 		return nil, err
 	} else {
-		log.Println("Successfully connected ", c)
+		klog.V(4).Infof("Successfully connected ", c)
+	}
+
+	tcpConn, ok := conn.(*net.TCPConn)
+	if !ok {
+		return nil, fmt.Errorf("net.TCPConn type assert failed")
 	}
 
 	// TODO: Ping thread
@@ -300,7 +310,7 @@ func sizeVarint(x int) (n int) {
 }
 
 func sendRequest(c *Client, conn *connection, rpcCall *call) error {
-	//log.Println("About to call RPC: ", rpcCall.procedure)
+	//klog.V(4).Infof("About to call RPC: ", rpcCall.procedure)
 
 	// 0. RpcRequestHeaderProto
 	var clientId [16]byte = [16]byte(*c.ClientId)
@@ -352,7 +362,7 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 		return err
 	}
 
-	//log.Println("Succesfully sent request of length: ", totalLength)
+	//klog.V(4).Infof("Succesfully sent request of length: ", totalLength)
 
 	return nil
 }
@@ -406,7 +416,7 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 		klog.Warningf("readDelimited(responseBytes, rpcResponseHeaderProto)", err)
 		return err
 	}
-	//log.Println("Received rpcResponseHeaderProto = ", rpcResponseHeaderProto)
+	//klog.V(4).Infof("Received rpcResponseHeaderProto = ", rpcResponseHeaderProto)
 
 	err = c.checkRpcHeader(&rpcResponseHeaderProto)
 	if err != nil {
@@ -418,7 +428,7 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 		// Parse RpcResponseWrapper
 		_, err = readDelimited(responseBytes[off:], rpcCall.response)
 	} else {
-		log.Println("RPC failed with status: ", rpcResponseHeaderProto.Status.String())
+		klog.V(4).Infof("RPC failed with status: ", rpcResponseHeaderProto.Status.String())
 		errorDetails := [4]string{rpcResponseHeaderProto.Status.String(), "ServerDidNotSetExceptionClassName", "ServerDidNotSetErrorMsg", "ServerDidNotSetErrorDetail"}
 		if rpcResponseHeaderProto.ExceptionClassName != nil {
 			errorDetails[0] = *rpcResponseHeaderProto.ExceptionClassName
@@ -552,7 +562,7 @@ func receiveSaslMessage(c *Client, conn *connection) (*hadoop_common.RpcSaslProt
 			return &saslRpcMessage, nil
 		}
 	} else {
-		log.Println("RPC failed with status: ", rpcResponseHeaderProto.Status.String())
+		klog.V(4).Infof("RPC failed with status: ", rpcResponseHeaderProto.Status.String())
 		errorDetails := [4]string{rpcResponseHeaderProto.Status.String(), "ServerDidNotSetExceptionClassName", "ServerDidNotSetErrorMsg", "ServerDidNotSetErrorDetail"}
 		if rpcResponseHeaderProto.ExceptionClassName != nil {
 			errorDetails[0] = *rpcResponseHeaderProto.ExceptionClassName
@@ -653,7 +663,7 @@ func negotiateSimpleTokenAuth(client *Client, con *connection) error {
 		return errors.New("expected SASL SUCCESS response!")
 	}
 
-	log.Println("Successfully completed SASL negotiation!")
+	klog.V(4).Infof("Successfully completed SASL negotiation!")
 
 	return nil //errors.New("abort here")
 }

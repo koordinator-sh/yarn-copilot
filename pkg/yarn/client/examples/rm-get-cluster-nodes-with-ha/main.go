@@ -20,7 +20,6 @@ import (
 	"log"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
 	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
 )
 
@@ -29,31 +28,14 @@ func main() {
 	yarnClient, _ := yarnclient.CreateYarnClient()
 	yarnClient.Initialize()
 
-	host := "0.0.0.0"
-	port := int32(8041)
-	vCores := int32(101)
-	memoryMB := int64(10240)
-	request := &yarnserver.UpdateNodeResourceRequestProto{
-		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
-			{
-				NodeId: &hadoopyarn.NodeIdProto{
-					Host: &host,
-					Port: &port,
-				},
-				ResourceOption: &hadoopyarn.ResourceOptionProto{
-					Resource: &hadoopyarn.ResourceProto{
-						Memory:       &memoryMB,
-						VirtualCores: &vCores,
-					},
-				},
-			},
-		},
+	request := &hadoopyarn.GetClusterNodesRequestProto{
+		NodeStates: []hadoopyarn.NodeStateProto{},
 	}
-	response, err := yarnClient.UpdateNodeResource(request)
+	response, err := yarnClient.GetClusterNodes(request)
 
 	if err != nil {
-		log.Fatal("yarnClient.UpdateNodeResource ", err)
+		log.Fatal("GetClusterNode ", err)
 	}
 
-	log.Printf("UpdateNodeResource response %v", response)
+	log.Printf("GetClusterNode response %v", response)
 }
