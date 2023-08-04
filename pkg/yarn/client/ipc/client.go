@@ -18,9 +18,11 @@ limitations under the License.
 package ipc
 
 import (
+	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"time"
@@ -37,6 +39,7 @@ import (
 
 const (
 	connDefaultTimeout = 10 * time.Second
+	rwDefaultTimeout   = 5 * time.Second
 )
 
 type Client struct {
@@ -90,7 +93,7 @@ func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Me
 	}
 
 	// Get connection to server
-	//klog.V(4).Infof("Connecting...", c)
+	klog.V(5).Infof("Connecting... %v", c)
 	conn, err := getConnection(c, &connectionId)
 	if err != nil {
 		return err
@@ -146,7 +149,7 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 	//if con == nil {
 	con, err := setupConnection(c)
 	if err != nil {
-		klog.Warningf("Couldn't setup connection: ", err)
+		klog.Warningf("Couldn't setup connection: %v", err)
 		return nil, err
 	}
 
@@ -191,10 +194,10 @@ func setupConnection(c *Client) (*connection, error) {
 	d := net.Dialer{Timeout: connDefaultTimeout}
 	conn, err := d.Dial("tcp", c.ServerAddress)
 	if err != nil {
-		klog.V(4).Infof("error: ", err)
+		klog.V(4).Infof("error: %v", err)
 		return nil, err
 	} else {
-		klog.V(4).Infof("Successfully connected ", c)
+		klog.V(4).Infof("Successfully connected %v", c)
 	}
 
 	tcpConn, ok := conn.(*net.TCPConn)
@@ -214,33 +217,37 @@ func setupConnection(c *Client) (*connection, error) {
 }
 
 func writeConnectionHeader(conn *connection, authProtocol yarnauth.AuthProtocol) error {
+	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+		return err
+	}
+
 	// RPC_HEADER
 	if _, err := conn.con.Write(yarnauth.RPC_HEADER); err != nil {
-		klog.Warningf("conn.Write yarnauth.RPC_HEADER", err)
+		klog.Warningf("conn.Write yarnauth.RPC_HEADER %v", err)
 		return err
 	}
 
 	// RPC_VERSION
 	if _, err := conn.con.Write(yarnauth.VERSION); err != nil {
-		klog.Warningf("conn.Write yarnauth.VERSION", err)
+		klog.Warningf("conn.Write yarnauth.VERSION %v", err)
 		return err
 	}
 
 	// RPC_SERVICE_CLASS
 	if serviceClass, err := yarnauth.ConvertFixedToBytes(yarnauth.RPC_SERVICE_CLASS); err != nil {
-		klog.Warningf("binary.Write", err)
+		klog.Warningf("binary.Write %v", err)
 		return err
 	} else if _, err := conn.con.Write(serviceClass); err != nil {
-		klog.Warningf("conn.Write RPC_SERVICE_CLASS", err)
+		klog.Warningf("conn.Write RPC_SERVICE_CLASS %v", err)
 		return err
 	}
 
 	// AuthProtocol
 	if authProtocolBytes, err := yarnauth.ConvertFixedToBytes(authProtocol); err != nil {
-		klog.Warningf("WTF AUTH_PROTOCOL", err)
+		klog.Warningf("WTF AUTH_PROTOCOL %v", err)
 		return err
 	} else if _, err := conn.con.Write(authProtocolBytes); err != nil {
-		klog.Warningf("conn.Write yarnauth.AUTH_PROTOCOL", err)
+		klog.Warningf("conn.Write yarnauth.AUTH_PROTOCOL %v", err)
 		return err
 	}
 
@@ -248,6 +255,10 @@ func writeConnectionHeader(conn *connection, authProtocol yarnauth.AuthProtocol)
 }
 
 func writeConnectionContext(c *Client, conn *connection, connectionId *connection_id, authProtocol yarnauth.AuthProtocol) error {
+	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+		return err
+	}
+
 	// Create hadoop_common.IpcConnectionContextProto
 	ugi, _ := yarnauth.CreateSimpleUGIProto()
 	ipcCtxProto := hadoop_common.IpcConnectionContextProto{UserInfo: ugi, Protocol: &connectionId.protocol}
@@ -264,13 +275,13 @@ func writeConnectionContext(c *Client, conn *connection, connectionId *connectio
 
 	rpcReqHeaderProtoBytes, err := proto.Marshal(&rpcReqHeaderProto)
 	if err != nil {
-		klog.Warningf("proto.Marshal(&rpcReqHeaderProto)", err)
+		klog.Warningf("proto.Marshal(&rpcReqHeaderProto) %v", err)
 		return err
 	}
 
-	ipcCtxProtoBytes, _ := proto.Marshal(&ipcCtxProto)
+	ipcCtxProtoBytes, err := proto.Marshal(&ipcCtxProto)
 	if err != nil {
-		klog.Warningf("proto.Marshal(&ipcCtxProto)", err)
+		klog.Warningf("proto.Marshal(&ipcCtxProto) %v", err)
 		return err
 	}
 
@@ -279,19 +290,19 @@ func writeConnectionContext(c *Client, conn *connection, connectionId *connectio
 	totalLengthBytes, err := yarnauth.ConvertFixedToBytes(tLen)
 
 	if err != nil {
-		klog.Warningf("ConvertFixedToBytes(totalLength)", err)
+		klog.Warningf("ConvertFixedToBytes(totalLength) %v", err)
 		return err
 	} else if _, err := conn.con.Write(totalLengthBytes); err != nil {
-		klog.Warningf("conn.con.Write(totalLengthBytes)", err)
+		klog.Warningf("conn.con.Write(totalLengthBytes) %v", err)
 		return err
 	}
 
 	if err := writeDelimitedBytes(conn, rpcReqHeaderProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, rpcReqHeaderProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, rpcReqHeaderProtoBytes) %v", err)
 		return err
 	}
 	if err := writeDelimitedBytes(conn, ipcCtxProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, ipcCtxProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, ipcCtxProtoBytes) %v", err)
 		return err
 	}
 
@@ -310,14 +321,18 @@ func sizeVarint(x int) (n int) {
 }
 
 func sendRequest(c *Client, conn *connection, rpcCall *call) error {
-	//klog.V(4).Infof("About to call RPC: ", rpcCall.procedure)
+	klog.V(5).Infof("About to call RPC: %v", rpcCall.procedure)
+
+	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+		return err
+	}
 
 	// 0. RpcRequestHeaderProto
 	var clientId [16]byte = [16]byte(*c.ClientId)
 	rpcReqHeaderProto := hadoop_common.RpcRequestHeaderProto{RpcKind: &yarnauth.RPC_PROTOCOL_BUFFFER, RpcOp: &yarnauth.RPC_FINAL_PACKET, CallId: &rpcCall.callId, ClientId: clientId[0:16], RetryCount: &rpcCall.retryCount}
 	rpcReqHeaderProtoBytes, err := proto.Marshal(&rpcReqHeaderProto)
 	if err != nil {
-		klog.Warningf("proto.Marshal(&rpcReqHeaderProto)", err)
+		klog.Warningf("proto.Marshal(&rpcReqHeaderProto) %v", err)
 		return err
 	}
 
@@ -325,7 +340,7 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 	requestHeaderProto := rpcCall.procedure
 	requestHeaderProtoBytes, err := proto.Marshal(requestHeaderProto)
 	if err != nil {
-		klog.Warningf("proto.Marshal(&requestHeaderProto)", err)
+		klog.Warningf("proto.Marshal(&requestHeaderProto) %v", err)
 		return err
 	}
 
@@ -333,36 +348,36 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 	paramProto := rpcCall.request
 	paramProtoBytes, err := proto.Marshal(paramProto)
 	if err != nil {
-		klog.Warningf("proto.Marshal(&paramProto)", err)
+		klog.Warningf("proto.Marshal(&paramProto) %v", err)
 		return err
 	}
 
 	totalLength := len(rpcReqHeaderProtoBytes) + sizeVarint(len(rpcReqHeaderProtoBytes)) + len(requestHeaderProtoBytes) + sizeVarint(len(requestHeaderProtoBytes)) + len(paramProtoBytes) + sizeVarint(len(paramProtoBytes))
 	var tLen int32 = int32(totalLength)
 	if totalLengthBytes, err := yarnauth.ConvertFixedToBytes(tLen); err != nil {
-		klog.Warningf("ConvertFixedToBytes(totalLength)", err)
+		klog.Warningf("ConvertFixedToBytes(totalLength) %v", err)
 		return err
 	} else {
 		if _, err := conn.con.Write(totalLengthBytes); err != nil {
-			klog.Warningf("conn.con.Write(totalLengthBytes)", err)
+			klog.Warningf("conn.con.Write(totalLengthBytes) %v", err)
 			return err
 		}
 	}
 
 	if err := writeDelimitedBytes(conn, rpcReqHeaderProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, rpcReqHeaderProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, rpcReqHeaderProtoBytes) %v", err)
 		return err
 	}
 	if err := writeDelimitedBytes(conn, requestHeaderProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, requestHeaderProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, requestHeaderProtoBytes) %v", err)
 		return err
 	}
 	if err := writeDelimitedBytes(conn, paramProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, paramProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, paramProtoBytes) %v", err)
 		return err
 	}
 
-	//klog.V(4).Infof("Succesfully sent request of length: ", totalLength)
+	klog.V(5).Infof("Succesfully sent request of length: ", totalLength)
 
 	return nil
 }
@@ -378,11 +393,11 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 
 func writeDelimitedBytes(conn *connection, data []byte) error {
 	if _, err := conn.con.Write(protowire.AppendVarint(nil, uint64(len(data)))); err != nil {
-		klog.Warningf("conn.con.Write(proto.EncodeVarint(uint64(len(data))))", err)
+		klog.Warningf("conn.con.Write(proto.EncodeVarint(uint64(len(data)))) %v", err)
 		return err
 	}
 	if _, err := conn.con.Write(data); err != nil {
-		klog.Warningf("conn.con.Write(data)", err)
+		klog.Warningf("conn.con.Write(data) %v", err)
 		return err
 	}
 
@@ -393,34 +408,44 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 	// Read first 4 bytes to get total-length
 	var totalLength int32 = -1
 	var totalLengthBytes [4]byte
+
+	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+		return err
+	}
+
 	if _, err := conn.con.Read(totalLengthBytes[0:4]); err != nil {
-		klog.Warningf("conn.con.Read(totalLengthBytes)", err)
+		klog.Warningf("conn.con.Read(totalLengthBytes) %v", err)
 		return err
 	}
 
 	if err := yarnauth.ConvertBytesToFixed(totalLengthBytes[0:4], &totalLength); err != nil {
-		klog.Warningf("yarnauth.ConvertBytesToFixed(totalLengthBytes, &totalLength)", err)
+		klog.Warningf("yarnauth.ConvertBytesToFixed(totalLengthBytes, &totalLength) %v", err)
 		return err
 	}
 
-	var responseBytes []byte = make([]byte, totalLength)
-	if _, err := conn.con.Read(responseBytes); err != nil {
-		klog.Warningf("conn.con.Read(totalLengthBytes)", err)
+	var responseBytes = make([]byte, totalLength)
+	reader := bufio.NewReader(conn.con)
+	read, err := io.ReadFull(reader, responseBytes)
+	if err != nil {
+		klog.Warningf("io.ReadFull(reader, responseBytes), %v", err)
 		return err
+	}
+	if int32(read) != totalLength {
+		return fmt.Errorf("actural read length %v does not match the total length %v", read, totalLength)
 	}
 
 	// Parse RpcResponseHeaderProto
 	rpcResponseHeaderProto := hadoop_common.RpcResponseHeaderProto{}
 	off, err := readDelimited(responseBytes[0:totalLength], &rpcResponseHeaderProto)
 	if err != nil {
-		klog.Warningf("readDelimited(responseBytes, rpcResponseHeaderProto)", err)
+		klog.Warningf("readDelimited(responseBytes, rpcResponseHeaderProto) %v", err)
 		return err
 	}
-	//klog.V(4).Infof("Received rpcResponseHeaderProto = ", rpcResponseHeaderProto)
+	klog.V(5).Infof("Received rpcResponseHeaderProto = %v", rpcResponseHeaderProto.String())
 
 	err = c.checkRpcHeader(&rpcResponseHeaderProto)
 	if err != nil {
-		klog.Warningf("c.checkRpcHeader failed", err)
+		klog.Warningf("c.checkRpcHeader failed %v", err)
 		return err
 	}
 
@@ -428,7 +453,7 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 		// Parse RpcResponseWrapper
 		_, err = readDelimited(responseBytes[off:], rpcCall.response)
 	} else {
-		klog.V(4).Infof("RPC failed with status: ", rpcResponseHeaderProto.Status.String())
+		klog.V(4).Infof("RPC failed with status: %v", rpcResponseHeaderProto.Status.String())
 		errorDetails := [4]string{rpcResponseHeaderProto.Status.String(), "ServerDidNotSetExceptionClassName", "ServerDidNotSetErrorMsg", "ServerDidNotSetErrorDetail"}
 		if rpcResponseHeaderProto.ExceptionClassName != nil {
 			errorDetails[0] = *rpcResponseHeaderProto.ExceptionClassName
@@ -452,7 +477,7 @@ func readDelimited(rawData []byte, msg proto.Message) (int, error) {
 	}
 	err := proto.Unmarshal(rawData[off:off+int(headerLength)], msg)
 	if err != nil {
-		klog.Warningf("proto.Unmarshal(rawData[off:off+headerLength]) ", err)
+		klog.Warningf("proto.Unmarshal(rawData[off:off+headerLength]) %v", err)
 		return -1, err
 	}
 
@@ -464,7 +489,7 @@ func (c *Client) checkRpcHeader(rpcResponseHeaderProto *hadoop_common.RpcRespons
 	var headerClientId = rpcResponseHeaderProto.ClientId
 	if rpcResponseHeaderProto.ClientId != nil {
 		if !bytes.Equal(callClientId[0:16], headerClientId[0:16]) {
-			klog.Warningf("Incorrect clientId: ", headerClientId)
+			klog.Warningf("Incorrect clientId: %v", headerClientId)
 			return errors.New("Incorrect clientId")
 		}
 	}
@@ -481,35 +506,39 @@ func sendSaslMessage(c *Client, conn *connection, message *hadoop_common.RpcSasl
 	saslRpcHeaderProtoBytes, err := proto.Marshal(&saslRpcHeaderProto)
 
 	if err != nil {
-		klog.Warningf("proto.Marshal(&saslRpcHeaderProto)", err)
+		klog.Warningf("proto.Marshal(&saslRpcHeaderProto) %v", err)
 		return err
 	}
 
 	saslRpcMessageProtoBytes, err := proto.Marshal(message)
 
 	if err != nil {
-		klog.Warningf("proto.Marshal(saslMessage)", err)
+		klog.Warningf("proto.Marshal(saslMessage) %v", err)
 		return err
 	}
 
 	totalLength := len(saslRpcHeaderProtoBytes) + sizeVarint(len(saslRpcHeaderProtoBytes)) + len(saslRpcMessageProtoBytes) + sizeVarint(len(saslRpcMessageProtoBytes))
 	var tLen int32 = int32(totalLength)
 
+	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+		return err
+	}
+
 	if totalLengthBytes, err := yarnauth.ConvertFixedToBytes(tLen); err != nil {
-		klog.Warningf("ConvertFixedToBytes(totalLength)", err)
+		klog.Warningf("ConvertFixedToBytes(totalLength) %v", err)
 		return err
 	} else {
 		if _, err := conn.con.Write(totalLengthBytes); err != nil {
-			klog.Warningf("conn.con.Write(totalLengthBytes)", err)
+			klog.Warningf("conn.con.Write(totalLengthBytes) %v", err)
 			return err
 		}
 	}
 	if err := writeDelimitedBytes(conn, saslRpcHeaderProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, saslRpcHeaderProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, saslRpcHeaderProtoBytes) %v", err)
 		return err
 	}
 	if err := writeDelimitedBytes(conn, saslRpcMessageProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, saslRpcMessageProtoBytes)", err)
+		klog.Warningf("writeDelimitedBytes(conn, saslRpcMessageProtoBytes) %v", err)
 		return err
 	}
 
@@ -521,19 +550,23 @@ func receiveSaslMessage(c *Client, conn *connection) (*hadoop_common.RpcSaslProt
 	var totalLength int32 = -1
 	var totalLengthBytes [4]byte
 
+	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+		return nil, err
+	}
+
 	if _, err := conn.con.Read(totalLengthBytes[0:4]); err != nil {
-		klog.Warningf("conn.con.Read(totalLengthBytes)", err)
+		klog.Warningf("conn.con.Read(totalLengthBytes) %v", err)
 		return nil, err
 	}
 	if err := yarnauth.ConvertBytesToFixed(totalLengthBytes[0:4], &totalLength); err != nil {
-		klog.Warningf("yarnauth.ConvertBytesToFixed(totalLengthBytes, &totalLength)", err)
+		klog.Warningf("yarnauth.ConvertBytesToFixed(totalLengthBytes, &totalLength) %v", err)
 		return nil, err
 	}
 
 	var responseBytes []byte = make([]byte, totalLength)
 
 	if _, err := conn.con.Read(responseBytes); err != nil {
-		klog.Warningf("conn.con.Read(totalLengthBytes)", err)
+		klog.Warningf("conn.con.Read(totalLengthBytes) %v", err)
 		return nil, err
 	}
 
@@ -541,13 +574,13 @@ func receiveSaslMessage(c *Client, conn *connection) (*hadoop_common.RpcSaslProt
 	rpcResponseHeaderProto := hadoop_common.RpcResponseHeaderProto{}
 	off, err := readDelimited(responseBytes[0:totalLength], &rpcResponseHeaderProto)
 	if err != nil {
-		klog.Warningf("readDelimited(responseBytes, rpcResponseHeaderProto)", err)
+		klog.Warningf("readDelimited(responseBytes, rpcResponseHeaderProto) %v", err)
 		return nil, err
 	}
 
 	err = checkSaslRpcHeader(&rpcResponseHeaderProto)
 	if err != nil {
-		klog.Warningf("checkSaslRpcHeader failed", err)
+		klog.Warningf("checkSaslRpcHeader failed %v", err)
 		return nil, err
 	}
 
@@ -562,7 +595,7 @@ func receiveSaslMessage(c *Client, conn *connection) (*hadoop_common.RpcSaslProt
 			return &saslRpcMessage, nil
 		}
 	} else {
-		klog.V(4).Infof("RPC failed with status: ", rpcResponseHeaderProto.Status.String())
+		klog.V(4).Infof("RPC failed with status: %v", rpcResponseHeaderProto.Status.String())
 		errorDetails := [4]string{rpcResponseHeaderProto.Status.String(), "ServerDidNotSetExceptionClassName", "ServerDidNotSetErrorMsg", "ServerDidNotSetErrorDetail"}
 		if rpcResponseHeaderProto.ExceptionClassName != nil {
 			errorDetails[0] = *rpcResponseHeaderProto.ExceptionClassName
@@ -582,7 +615,7 @@ func checkSaslRpcHeader(rpcResponseHeaderProto *hadoop_common.RpcResponseHeaderP
 	var headerClientId []byte = rpcResponseHeaderProto.ClientId
 	if rpcResponseHeaderProto.ClientId != nil {
 		if !bytes.Equal(SASL_RPC_DUMMY_CLIENT_ID, headerClientId) {
-			klog.Warningf("Incorrect clientId: ", headerClientId)
+			klog.Warningf("Incorrect clientId: %v", headerClientId)
 			return errors.New("Incorrect clientId")
 		}
 	}
@@ -635,7 +668,7 @@ func negotiateSimpleTokenAuth(client *Client, con *connection) error {
 	response, err := security.GetDigestMD5ChallengeResponse(protocol, serverId, challenge, userToken)
 
 	if err != nil {
-		klog.Warningf("failed to get challenge response! ", err)
+		klog.Warningf("failed to get challenge response! %v", err)
 		return err
 	}
 

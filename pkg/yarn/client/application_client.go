@@ -35,7 +35,7 @@ func (c *YarnApplicationClient) GetClusterNode(request *hadoopyarn.GetClusterNod
 	response := &hadoopyarn.GetClusterNodesResponseProto{}
 	err := c.client.GetClusterNodes(request, response)
 	if err != nil {
-		return nil, err
+		return response, err
 	}
 	return response, nil
 }

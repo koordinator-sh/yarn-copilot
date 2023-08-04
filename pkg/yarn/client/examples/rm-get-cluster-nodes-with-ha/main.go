@@ -34,8 +34,10 @@ func main() {
 	response, err := yarnClient.GetClusterNodes(request)
 
 	if err != nil {
-		log.Fatal("GetClusterNode ", err)
+		log.Printf("GetClusterNode size %v, response %v", len(response.NodeReports), response)
+		log.Fatal("GetClusterNode Error", err)
 	}
 
 	log.Printf("GetClusterNode response %v", response)
+	log.Printf("GetClusterNode response length %v", len(response.NodeReports))
 }
