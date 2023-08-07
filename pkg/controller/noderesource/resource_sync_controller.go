@@ -47,7 +47,7 @@ const (
 
 type YARNResourceSyncReconciler struct {
 	client.Client
-	yarnClient *yarnclient.YARNClient
+	yarnClient *yarnclient.YarnClient
 }
 
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -91,7 +91,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 }
 
 func Add(mgr ctrl.Manager) error {
-	yarnClient, err := yarnclient.CreateYARNClient()
+	yarnClient, err := yarnclient.CreateYarnClient()
 	if err != nil {
 		return err
 	}

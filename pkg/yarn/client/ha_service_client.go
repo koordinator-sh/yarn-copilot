@@ -25,7 +25,7 @@ type YarnHAClient struct {
 	client yarnservice.HAServiceProtocolService
 }
 
-func CreateYarrHAClient(rmAddress string) (*YarnHAClient, error) {
+func CreateYarnHAClient(rmAddress string) (*YarnHAClient, error) {
 	c, err := yarnservice.DialHAServiceProtocolService(rmAddress)
 	return &YarnHAClient{client: c}, err
 }

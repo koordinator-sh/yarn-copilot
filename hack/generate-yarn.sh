@@ -72,7 +72,7 @@ function generate_import_files_pkg_map() {
   # server/yarn_server_resourcemanager_service_protos.proto
   import_paths=("$( grep -E "import \".*.proto\";" ${file_path} | grep -Eo "\".*\"" | sed "s/\"//g" )")
   if [ ! -z "${import_paths}" ]; then
-    for import_path in "${import_paths[@]}"
+    for import_path in ${import_paths[@]}
     do
         import_file_name="$( echo ${import_path} | grep -Eo "[a-z,_,A-Z]*.proto$" )" # yarn_server_resourcemanager_service_protos.proto
         import_file_path="$( find ${GOYARN_API_PATH} -name ${import_file_name} )" # ./hack/../pkg/yarn/apis/proto/hadoopyarn/server/yarn_server_resourcemanager_service_protos.proto
