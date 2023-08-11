@@ -1,0 +1,240 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "hadoop-yarn.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
+    helm.sh/chart: {{ include "hadoop-yarn.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+data:
+  bootstrap.sh: |
+    #!/bin/bash -x
+
+    echo Starting
+
+    : ${HADOOP_HOME:=/opt/hadoop}
+
+    echo Using ${HADOOP_HOME} as HADOOP_HOME
+
+    . $HADOOP_HOME/etc/hadoop/hadoop-env.sh
+
+    # ------------------------------------------------------
+    # Directory to find config artifacts
+    # ------------------------------------------------------
+
+    CONFIG_DIR="/tmp/hadoop-config"
+
+    # ------------------------------------------------------
+    # Copy config files from volume mount
+    # ------------------------------------------------------
+
+    for f in slaves core-site.xml mapred-site.xml yarn-site.xml; do
+      if [[ -e ${CONFIG_DIR}/$f ]]; then
+        cp ${CONFIG_DIR}/$f $HADOOP_HOME/etc/hadoop/$f
+      else
+        echo "ERROR: Could not find $f in $CONFIG_DIR"
+        exit 1
+      fi
+    done
+
+    # ------------------------------------------------------
+    # Start RESOURCE MANAGER and PROXY SERVER as daemons
+    # ------------------------------------------------------
+    if [[ "${YARN_ROLE}" =~ "yarn-rm" ]]; then
+      $HADOOP_HOME/bin/yarn --loglevel {{ .Values.logLevel }} --daemon start resourcemanager 
+      $HADOOP_HOME/bin/yarn --loglevel {{ .Values.logLevel }} --daemon start proxyserver
+    fi
+
+    # ------------------------------------------------------
+    # Start NODE MANAGER
+    # ------------------------------------------------------
+    if [[ "${YARN_ROLE}" =~ "yarn-nm" ]]; then
+      sed -i '/<\/configuration>/d' $HADOOP_HOME/etc/hadoop/yarn-site.xml
+      cat >> $HADOOP_HOME/etc/hadoop/yarn-site.xml <<- EOM
+      <property>
+        <name>yarn.nodemanager.resource.memory-mb</name>
+        <value>${MY_MEM_LIMIT:-2048}</value>
+      </property>
+
+      <property>
+        <name>yarn.nodemanager.resource.cpu-vcores</name>
+        <value>${MY_CPU_LIMIT:-2}</value>
+      </property>
+      <property>
+        <name>yarn.nodemanager.address</name>
+        <value>${HOSTNAME}:8041</value>
+      </property>
+    EOM
+
+      echo '</configuration>' >> $HADOOP_HOME/etc/hadoop/yarn-site.xml
+
+      # Wait with timeout for resourcemanager
+      TMP_URL="http://{{ .Values.yarn.resourceManager.hostName }}:{{ .Values.yarn.resourceManager.webPort }}/ws/v1/cluster/info"
+      if timeout 5m bash -c "until curl -sf $TMP_URL; do echo Waiting for $TMP_URL; sleep 5; done"; then
+        $HADOOP_HOME/bin/yarn nodemanager --loglevel {{ .Values.logLevel }}
+      else 
+        echo "$0: Timeout waiting for $TMP_URL, exiting."
+        exit 1
+      fi
+
+    fi
+
+    # ------------------------------------------------------
+    # Tail logfiles for daemonized workloads (parameter -d)
+    # ------------------------------------------------------
+    if [[ $1 == "-d" ]]; then
+      until find ${HADOOP_HOME}/logs -mmin -1 | egrep -q '.*'; echo "`date`: Waiting for logs..." ; do sleep 2 ; done
+      tail -F ${HADOOP_HOME}/logs/* &
+      while true; do sleep 1000; done
+    fi
+
+    # ------------------------------------------------------
+    # Start bash if requested (parameter -bash)
+    # ------------------------------------------------------
+    if [[ $1 == "-bash" ]]; then
+      /bin/bash
+    fi
+
+  core-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+    <configuration>
+        <property>
+            <name>fs.defaultFS</name>
+            <value>hdfs://{{ include "hadoop-yarn.fullname" . }}-hdfs-nn:9000/</value>
+            <description>NameNode URI</description>
+        </property>
+    </configuration>
+
+  mapred-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+    <configuration>
+        <property>
+            <name>mapreduce.framework.name</name>
+            <value>yarn</value>
+        </property>
+        <property>
+            <name>mapreduce.jobhistory.address</name>
+            <value>{{ include "hadoop-yarn.fullname" . }}-yarn-rm-0.{{ include "hadoop-yarn.fullname" . }}-yarn-rm.{{ .Release.Namespace }}.svc.cluster.local:10020</value>
+        </property>
+        <property>
+            <name>mapreduce.jobhistory.webapp.address</name>
+            <value>{{ include "hadoop-yarn.fullname" . }}-yarn-rm-0.{{ include "hadoop-yarn.fullname" . }}-yarn-rm.{{ .Release.Namespace }}.svc.cluster.local:19888</value>
+        </property>
+    </configuration>
+
+  slaves: |
+    localhost
+
+  yarn-site.xml: |
+    <?xml version="1.0"?>
+    <?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+    <configuration>
+        <property>
+            <name>yarn.resourcemanager.hostname</name>
+            <value>{{ .Values.yarn.resourceManager.hostName }}</value>
+        </property>
+
+        <!-- RM web proxy server address -->
+        <property>
+            <name>yarn.web-proxy.address</name>
+            <value>{{ .Values.yarn.resourceManager.hostName }}:{{ .Values.yarn.resourceManager.webProxy.port}}</value>
+        </property>
+
+        <!-- Enlarge yarn scheduler maximum allocation mb & vcores -->
+        <property>
+            <name>yarn.scheduler.maximum-allocation-vcores</name>
+            <value>48</value>
+        </property>
+        <property>
+            <name>yarn.scheduler.maximum-allocation-mb</name>
+            <value>20480</value>
+        </property>
+
+        <!-- Specify web app port -->
+        <property>
+            <name>yarn.resourcemanager.webapp.address</name>
+            <value>{{ .Values.yarn.resourceManager.hostName }}:{{ .Values.yarn.resourceManager.webPort }}</value>
+        </property>
+
+        <!-- Enable log aggregation. -->
+        <property>
+            <name>yarn.log-aggregation-enable</name>
+            <value>true</value>
+        </property>
+        <!-- Retain seconds for logs -->
+        <property>
+            <name>yarn.log-aggregation.retain-seconds</name>
+            <value>86400</value>
+        </property>
+
+        <!-- Bind to all interfaces -->
+        <property>
+            <name>yarn.resourcemanager.bind-host</name>
+            <value>0.0.0.0</value>
+        </property>
+        <property>
+            <name>yarn.nodemanager.bind-host</name>
+            <value>0.0.0.0</value>
+        </property>
+        <property>
+            <name>yarn.timeline-service.bind-host</name>
+            <value>0.0.0.0</value>
+        </property>
+        <property>
+            <name>yarn.web-proxy.bind-host</name>
+            <value>0.0.0.0</value>
+        </property>
+        <!-- /Bind to all interfaces -->
+
+        <property>
+            <name>yarn.nodemanager.vmem-check-enabled</name>
+            <value>false</value>
+        </property>
+
+        <property>
+            <name>yarn.nodemanager.aux-services</name>
+            <value>mapreduce_shuffle</value>
+        </property>
+
+        <property>
+            <name>yarn.nodemanager.aux-services.mapreduce_shuffle.class</name>
+            <value>org.apache.hadoop.mapred.ShuffleHandler</value>
+        </property>
+
+        <property>
+            <description>List of directories to store localized files in.</description>
+            <name>yarn.nodemanager.local-dirs</name>
+            <value>/var/lib/hadoop-yarn/cache/${user.name}/nm-local-dir</value>
+        </property>
+
+        <property>
+            <description>Where to store container logs.</description>
+            <name>yarn.nodemanager.log-dirs</name>
+            <value>/var/log/hadoop-yarn/containers</value>
+        </property>
+
+        <property>
+            <description>Where to aggregate logs to.</description>
+            <name>yarn.nodemanager.remote-app-log-dir</name>
+            <value>/var/log/hadoop-yarn/apps</value>
+        </property>
+
+        <property>
+            <name>yarn.application.classpath</name>
+            <value>
+                /opt/hadoop/etc/hadoop,
+                /opt/hadoop/share/hadoop/common/*,
+                /opt/hadoop/share/hadoop/common/lib/*,
+                /opt/hadoop/share/hadoop/hdfs/*,
+                /opt/hadoop/share/hadoop/hdfs/lib/*,
+                /opt/hadoop/share/hadoop/mapreduce/*,
+                /opt/hadoop/share/hadoop/mapreduce/lib/*,
+                /opt/hadoop/share/hadoop/yarn/*,
+                /opt/hadoop/share/hadoop/yarn/lib/*
+            </value>
+        </property>
+    </configuration>
