@@ -28,7 +28,7 @@ import (
 
 func main() {
 	// Create YarnConfiguration
-	conf, _ := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"))
+	conf, _ := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"), "")
 
 	// Create YarnAdminClient
 	yarnAdminClient, _ := yarnclient.CreateYarnAdminClient(conf, nil)

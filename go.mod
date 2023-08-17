@@ -69,6 +69,7 @@ require (
 require (
 	github.com/gin-gonic/gin v1.8.1
 	github.com/go-resty/resty/v2 v2.7.0
+	github.com/golangplus/testing v1.0.0
 	github.com/opencontainers/runc v1.0.2
 )
 
@@ -110,6 +111,7 @@ require (
 	github.com/goccy/go-json v0.9.7 // indirect
 	github.com/godbus/dbus/v5 v5.0.4 // indirect
 	github.com/golang-jwt/jwt/v4 v4.2.0 // indirect
+	github.com/golangplus/bytes v1.0.0 // indirect
 	github.com/google/cadvisor v0.39.3 // indirect
 	github.com/gorilla/websocket v1.5.0 // indirect
 	github.com/hodgesds/perf-utils v0.5.1 // indirect

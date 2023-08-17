@@ -57,7 +57,7 @@ spec:
                   fieldPath: metadata.namespace
             - name: HADOOP_CONF_DIR
               value: /etc/hadoop-conf
-          image: registry.cn-beijing.aliyuncs.com/koordinator-sh/yarn-operator:fix-rpc-8843dea
+          image: registry.cn-beijing.aliyuncs.com/koordinator-sh/yarn-operator:multi-cluster-a4372e4
           imagePullPolicy: Always
           name: yarn-operator
           ports:

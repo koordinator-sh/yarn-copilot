@@ -45,7 +45,49 @@ data:
         <property>
             <name>yarn.resourcemanager.address.rm3</name>
             <value>0.0.0.0:8032</value>
+        </property>
     </configuration>
-  core-site.xml: |
+  # format: ${cluster-id}.yarn-site.xml
+  clusterid.yarn-site.xml: |
     <configuration>
+        <property>
+            <name>yarn.resourcemanager.admin.address</name>
+            <value>0.0.0.0:8033</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.address</name>
+            <value>0.0.0.0:8032</value>
+        </property>
+        <property>
+          <name>yarn.resourcemanager.ha.enabled</name>
+          <value>true</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.ha.rm-ids</name>
+            <value>rm1,rm2,rm3</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.admin.address.rm1</name>
+            <value>0.0.0.0:8033</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.admin.address.rm2</name>
+            <value>0.0.0.0:8033</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.admin.address.rm3</name>
+            <value>0.0.0.0:8033</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.address.rm1</name>
+            <value>0.0.0.0:8032</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.address.rm2</name>
+            <value>0.0.0.0:8032</value>
+        </property>
+        <property>
+            <name>yarn.resourcemanager.address.rm3</name>
+            <value>0.0.0.0:8032</value>
+        </property>
     </configuration>

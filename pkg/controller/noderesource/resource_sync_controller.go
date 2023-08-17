@@ -38,16 +38,13 @@ import (
 )
 
 const (
-	Name          = "yarnresource"
-	YarnNamespace = "yarn"
-
-	yarnNodeNameAnnotation = "node.yarn.koordinator.sh"
-	yarnNodeIdAnnotation   = "yarn.hadoop.apache.org/node-id"
+	Name = "yarnresource"
 )
 
 type YARNResourceSyncReconciler struct {
 	client.Client
-	yarnClient *yarnclient.YarnClient
+	yarnClient  *yarnclient.YarnClient
+	yarnClients map[string]*yarnclient.YarnClient
 }
 
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -62,13 +59,13 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	yarnNodeName, yarnNodePort, err := r.getYARNNodeID(node)
+	yarnNode, err := r.getYARNNode(node)
 	if err != nil {
 		klog.Warningf("fail to parse yarn node name for %v, error %v", node.Name, err)
 		return ctrl.Result{}, nil
 	}
-	if yarnNodeName == "" || yarnNodePort == 0 {
-		klog.V(3).Infof("skip for yarn node id not exist in node %v annotation %v", req.Name, yarnNodeNameAnnotation)
+	if yarnNode == nil || yarnNode.Name == "" || yarnNode.Port == 0 {
+		klog.V(3).Infof("skip for yarn node not exist on node %v, detail %+v", req.Name, yarnNode)
 		return ctrl.Result{}, nil
 	}
 
@@ -81,26 +78,19 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	}
 
 	// TODO control update frequency
-	if err := r.updateYARNNodeResource(yarnNodeName, yarnNodePort, batchCPU, batchMemory); err != nil {
-		klog.Warningf("update batch resource to yarn node %v:%v failed, error %v", yarnNodeName, yarnNodePort, err)
+	if err := r.updateYARNNodeResource(yarnNode, batchCPU, batchMemory); err != nil {
+		klog.Warningf("update batch resource to yarn node %v failed, error %v", yarnNode, err)
 		return ctrl.Result{Requeue: true}, err
 	}
-	klog.V(4).Infof("update node %v batch resource to yarn %v:%v finish, cpu-core %v, memory-mb %v",
-		node.Name, yarnNodeName, yarnNodePort, batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
+	klog.V(4).Infof("update node %v batch resource to yarn %+v finish, cpu-core %v, memory-mb %v",
+		node.Name, yarnNode, batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
 	return ctrl.Result{}, nil
 }
 
 func Add(mgr ctrl.Manager) error {
-	yarnClient, err := yarnclient.CreateYarnClient()
-	if err != nil {
-		return err
-	}
 	r := &YARNResourceSyncReconciler{
-		Client:     mgr.GetClient(),
-		yarnClient: yarnClient,
-	}
-	if err := r.yarnClient.Initialize(); err != nil {
-		return err
+		Client:      mgr.GetClient(),
+		yarnClients: make(map[string]*yarnclient.YarnClient),
 	}
 	return r.SetupWithManager(mgr)
 }
@@ -112,62 +102,61 @@ func (r *YARNResourceSyncReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNodeIDWithPodAnno(node *corev1.Node) (string, int32, error) {
-	podList := &corev1.PodList{}
+func (r *YARNResourceSyncReconciler) getYARNNodeManagerPod(node *corev1.Node) (*corev1.Pod, error) {
 	opts := []client.ListOption{
-		client.InNamespace(YarnNamespace),
-		client.MatchingLabels{"app.kubernetes.io/component": "node-manager"},
+		client.MatchingLabels{yarnNMComponentLabel: yarnNMComponentValue},
+		client.MatchingFields{"spec.nodeName": node.Name},
 	}
-
-	ctx := context.TODO()
-	if err := r.Client.List(ctx, podList, opts...); err != nil {
-		return "", 0, fmt.Errorf("get %v pods failed with error %v", YarnNamespace, err)
+	podList := &corev1.PodList{}
+	if err := r.Client.List(context.TODO(), podList, opts...); err != nil {
+		return nil, fmt.Errorf("get node manager pod failed on node %v with error %v", node.Name, err)
 	}
-	for _, pod := range podList.Items {
-		if pod.Spec.NodeName != node.Name {
-			continue
-		}
-		podAnnoNodeId, exists := pod.Annotations[yarnNodeIdAnnotation]
-		if !exists {
-			continue
-		}
-		tokens := strings.Split(podAnnoNodeId, ":")
-		if len(tokens) != 2 {
-			continue
-		}
-		port, err := strconv.Atoi(tokens[1])
-		if err != nil {
-			continue
-		}
-		return tokens[0], int32(port), nil
+	if len(podList.Items) == 0 {
+		return nil, nil
 	}
-	return "", 0, nil
+	if len(podList.Items) > 1 {
+		klog.Warningf("get %v node manager pod on node %v, will select the first one", len(podList.Items), node.Name)
+		return &podList.Items[0], nil
+	}
+	return &podList.Items[0], nil
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNodeID(node *corev1.Node) (string, int32, error) {
-	if node == nil || node.Annotations == nil {
-		return "", 0, nil
+func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*yarnNode, error) {
+	if node == nil {
+		return nil, nil
 	}
 
-	// TODO get yarn node name from node manager pod attr
-	nodeID, exist := node.Annotations[yarnNodeNameAnnotation]
-	if !exist {
-		return r.getYARNNodeIDWithPodAnno(node)
-	}
-
-	attrs := strings.Split(nodeID, ":")
-	if len(attrs) != 2 {
-		return "", 0, fmt.Errorf("illegal format during parse yarn node name %v for node %v", nodeID, node.Name)
-	}
-	nodeName := attrs[0]
-	nodePort, err := strconv.ParseInt(attrs[1], 10, 64)
+	nmPod, err := r.getYARNNodeManagerPod(node)
 	if err != nil {
-		return "", 0, fmt.Errorf("illegal format during parse yarn node port %v for node %v", nodeID, node.Name)
+		return nil, err
+	} else if nmPod == nil {
+		return nil, nil
 	}
-	return nodeName, int32(nodePort), nil
+
+	podAnnoNodeId, exists := nmPod.Annotations[yarnNodeIdAnnotation]
+	if !exists {
+		return nil, fmt.Errorf("yarn nm id %v not exist in node annotationv", yarnNodeIdAnnotation)
+	}
+	tokens := strings.Split(podAnnoNodeId, ":")
+	if len(tokens) != 2 {
+		return nil, fmt.Errorf("yarn nm id %v format is illegal", podAnnoNodeId)
+	}
+	port, err := strconv.Atoi(tokens[1])
+	if err != nil {
+		return nil, fmt.Errorf("yarn nm id port %v format is illegal", podAnnoNodeId)
+	}
+
+	yarnNode := &yarnNode{
+		Name: tokens[0],
+		Port: int32(port),
+	}
+	if clusterID, exist := nmPod.Annotations[yarnClusterIDAnnotation]; exist {
+		yarnNode.ClusterID = clusterID
+	}
+	return yarnNode, nil
 }
 
-func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNodeName string, yarnNodePort int32, cpuMilli, memory resource.Quantity) error {
+func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *yarnNode, cpuMilli, memory resource.Quantity) error {
 	// convert to yarn format
 	vcores := int32(cpuMilli.ScaledValue(resource.Kilo))
 	memoryMB := memory.ScaledValue(resource.Mega)
@@ -176,8 +165,8 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNodeName string,
 		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
 			{
 				NodeId: &hadoopyarn.NodeIdProto{
-					Host: pointer.String(yarnNodeName),
-					Port: pointer.Int32(yarnNodePort),
+					Host: pointer.String(yarnNode.Name),
+					Port: pointer.Int32(yarnNode.Port),
 				},
 				ResourceOption: &hadoopyarn.ResourceOptionProto{
 					Resource: &hadoopyarn.ResourceProto{
@@ -188,9 +177,38 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNodeName string,
 			},
 		},
 	}
-	if resp, err := r.yarnClient.UpdateNodeResource(request); err != nil {
-		initErr := r.yarnClient.Reinitialize()
+	yarnClient, err := r.getYARNClient(yarnNode)
+	if err != nil {
+		return err
+	}
+	if resp, err := yarnClient.UpdateNodeResource(request); err != nil {
+		initErr := yarnClient.Reinitialize()
 		return fmt.Errorf("UpdateNodeResource resp %v, error %v, reinitialize error %v", resp, err, initErr)
 	}
 	return nil
+}
+
+func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *yarnNode) (*yarnclient.YarnClient, error) {
+	if yarnNode.ClusterID == "" && r.yarnClient != nil {
+		return r.yarnClient, nil
+	} else if yarnNode.ClusterID == "" && r.yarnClient == nil {
+		yarnClient, err := yarnclient.CreateYarnClient()
+		if err != nil {
+			return nil, err
+		}
+		r.yarnClient = yarnClient
+		return yarnClient, nil
+	}
+
+	//yarnNode.ClusterID != ""
+	if clusterClient, exist := r.yarnClients[yarnNode.ClusterID]; exist {
+		return clusterClient, nil
+	}
+	// create new client by cluster id
+	clusterClient, err := yarnclient.CreateYarnClientByClusterID(yarnNode.ClusterID)
+	if err != nil {
+		return nil, err
+	}
+	r.yarnClients[yarnNode.ClusterID] = clusterClient
+	return clusterClient, nil
 }
