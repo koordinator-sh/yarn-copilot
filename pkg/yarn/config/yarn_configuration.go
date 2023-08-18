@@ -67,33 +67,33 @@ type YarnConfiguration interface {
 	SetInt(key string, value int) error
 }
 
-func (yarn_conf *yarn_configuration) Get(key string, defaultValue string) (string, error) {
-	return yarn_conf.conf.Get(key, defaultValue)
+func (yarnConf *yarn_configuration) Get(key string, defaultValue string) (string, error) {
+	return yarnConf.conf.Get(key, defaultValue)
 }
 
-func (yarn_conf *yarn_configuration) GetInt(key string, defaultValue int) (int, error) {
-	return yarn_conf.conf.GetInt(key, defaultValue)
+func (yarnConf *yarn_configuration) GetInt(key string, defaultValue int) (int, error) {
+	return yarnConf.conf.GetInt(key, defaultValue)
 }
 
-func (yarn_conf *yarn_configuration) GetRMAddress() (string, error) {
-	return yarn_conf.conf.Get(RM_ADDRESS, DEFAULT_RM_ADDRESS)
+func (yarnConf *yarn_configuration) GetRMAddress() (string, error) {
+	return yarnConf.conf.Get(RM_ADDRESS, DEFAULT_RM_ADDRESS)
 }
 
-func (yarn_conf *yarn_configuration) GetRMSchedulerAddress() (string, error) {
-	return yarn_conf.conf.Get(RM_SCHEDULER_ADDRESS, DEFAULT_RM_SCHEDULER_ADDRESS)
+func (yarnConf *yarn_configuration) GetRMSchedulerAddress() (string, error) {
+	return yarnConf.conf.Get(RM_SCHEDULER_ADDRESS, DEFAULT_RM_SCHEDULER_ADDRESS)
 }
 
-func (yarn_conf *yarn_configuration) GetRMAdminAddress() (string, error) {
-	return yarn_conf.conf.Get(RM_ADMIN_ADDRESS, DEFAULT_RM_ADMIN_ADDRESS)
+func (yarnConf *yarn_configuration) GetRMAdminAddress() (string, error) {
+	return yarnConf.conf.Get(RM_ADMIN_ADDRESS, DEFAULT_RM_ADMIN_ADDRESS)
 }
 
-func (yarn_conf *yarn_configuration) GetRMEnabledHA() (bool, error) {
-	return yarn_conf.conf.GetBool(RM_HA_ENABLED, DEFAULT_RM_HA_ENABLED)
+func (yarnConf *yarn_configuration) GetRMEnabledHA() (bool, error) {
+	return yarnConf.conf.GetBool(RM_HA_ENABLED, DEFAULT_RM_HA_ENABLED)
 }
 
-func (yarn_conf *yarn_configuration) GetRMs() ([]string, error) {
+func (yarnConf *yarn_configuration) GetRMs() ([]string, error) {
 	rmIDs := make([]string, 0)
-	allRMs, err := yarn_conf.conf.Get(RM_HA_RM_IDS, "")
+	allRMs, err := yarnConf.conf.Get(RM_HA_RM_IDS, "")
 	if err != nil {
 		return rmIDs, nil
 	}
@@ -101,35 +101,43 @@ func (yarn_conf *yarn_configuration) GetRMs() ([]string, error) {
 	return rmIDs, nil
 }
 
-func (yarn_conf *yarn_configuration) GetRMAdminAddressByID(rmID string) (string, error) {
+func (yarnConf *yarn_configuration) GetRMAdminAddressByID(rmID string) (string, error) {
 	// yarn.resourcemanager.admin.address.rm1
 	rmAddrKey := fmt.Sprintf("%v.%v", RM_ADMIN_ADDRESS, rmID)
-	return yarn_conf.conf.Get(rmAddrKey, DEFAULT_RM_ADMIN_ADDRESS)
+	return yarnConf.conf.Get(rmAddrKey, DEFAULT_RM_ADMIN_ADDRESS)
 }
 
-func (yarn_conf *yarn_configuration) GetRMAddressByID(rmID string) (string, error) {
+func (yarnConf *yarn_configuration) GetRMAddressByID(rmID string) (string, error) {
 	// yarn.resourcemanager.address.rm1
 	rmAddrKey := fmt.Sprintf("%v.%v", RM_ADDRESS, rmID)
-	return yarn_conf.conf.Get(rmAddrKey, DEFAULT_RM_ADDRESS)
+	return yarnConf.conf.Get(rmAddrKey, DEFAULT_RM_ADDRESS)
 }
 
-func (yarn_conf *yarn_configuration) Set(key string, value string) error {
-	return yarn_conf.conf.Set(key, value)
+func (yarnConf *yarn_configuration) Set(key string, value string) error {
+	return yarnConf.conf.Set(key, value)
 }
 
-func (yarn_conf *yarn_configuration) SetInt(key string, value int) error {
-	return yarn_conf.conf.SetInt(key, value)
+func (yarnConf *yarn_configuration) SetInt(key string, value int) error {
+	return yarnConf.conf.SetInt(key, value)
 }
 
-func (yarn_conf *yarn_configuration) SetRMAddress(address string) error {
-	return yarn_conf.conf.Set(RM_ADDRESS, address)
+func (yarnConf *yarn_configuration) SetRMAddress(address string) error {
+	return yarnConf.conf.Set(RM_ADDRESS, address)
 }
 
-func (yarn_conf *yarn_configuration) SetRMSchedulerAddress(address string) error {
-	return yarn_conf.conf.Set(RM_SCHEDULER_ADDRESS, address)
+func (yarnConf *yarn_configuration) SetRMSchedulerAddress(address string) error {
+	return yarnConf.conf.Set(RM_SCHEDULER_ADDRESS, address)
 }
 
-func NewYarnConfiguration(hadooConfDir string) (YarnConfiguration, error) {
-	c, err := NewConfigurationResources(hadooConfDir, []Resource{YARN_DEFAULT, YARN_SITE})
+func NewYarnConfiguration(hadooConfDir string, clusterID string) (YarnConfiguration, error) {
+	// for yarn-site.xml with cluster id, read from clusterid.yarn-site.xml
+	c, err := NewConfigurationResources(hadooConfDir, []Resource{YARN_DEFAULT, YARN_SITE}, configPrefix(clusterID))
 	return &yarn_configuration{conf: c}, err
+}
+
+func configPrefix(clusterID string) string {
+	if clusterID != "" {
+		return clusterID + "."
+	}
+	return ""
 }

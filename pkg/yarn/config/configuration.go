@@ -96,10 +96,10 @@ func (conf *configuration) SetInt(key string, value int) error {
 }
 
 func NewConfiguration(hadoopConfDir string) (Configuration, error) {
-	return NewConfigurationResources(hadoopConfDir, []Resource{})
+	return NewConfigurationResources(hadoopConfDir, []Resource{}, "")
 }
 
-func NewConfigurationResources(hadoopConfDir string, resources []Resource) (Configuration, error) {
+func NewConfigurationResources(hadoopConfDir string, resources []Resource, prefix string) (Configuration, error) {
 	// Add $HADOOP_CONF_DIR/core-default.xml & $HADOOP_CONF_DIR/core-site.xml
 	resourcesWithDefault := []Resource{CORE_DEFAULT, CORE_SITE}
 	resourcesWithDefault = append(resourcesWithDefault, resources...)
@@ -107,7 +107,7 @@ func NewConfigurationResources(hadoopConfDir string, resources []Resource) (Conf
 	c := configuration{Properties: make(map[string]string)}
 
 	for _, resource := range resourcesWithDefault {
-		conf, err := os.Open(hadoopConfDir + string(os.PathSeparator) + resource.Name)
+		conf, err := os.Open(hadoopConfDir + string(os.PathSeparator) + prefix + resource.Name)
 		if err != nil {
 			if !resource.Required {
 				continue

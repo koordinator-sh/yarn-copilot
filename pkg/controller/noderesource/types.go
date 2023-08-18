@@ -14,27 +14,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package noderesource
 
-import (
-	"log"
-
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+const (
+	YarnNMComponentLabel = "app.kubernetes.io/component"
+	YarnNMComponentValue = "node-manager"
+	YarnNodeIdAnnotation = "yarn.hadoop.apache.org/node-id"
 )
-
-func main() {
-	// Create YarnClient
-	yarnClient, _ := yarnclient.CreateYarnClient()
-
-	request := &hadoopyarn.GetClusterNodesRequestProto{
-		NodeStates: []hadoopyarn.NodeStateProto{},
-	}
-	response, err := yarnClient.GetClusterNodes(request)
-
-	if err != nil {
-		log.Fatal("GetClusterNode ", err)
-	}
-
-	log.Printf("GetClusterNode response %v", response)
-}

@@ -1,0 +1,24 @@
+{{- if .Values.yarn.nodeManager.exposePortsViaLB }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hadoop-yarn.fullname" . }}-nm-ports
+  labels:
+    app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
+    helm.sh/chart: {{ include "hadoop-yarn.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: node-manager
+spec:
+  ports:
+  - port: 8088
+    name: web
+  - port: 8082
+    name: web2
+  - port: 8042
+    name: api
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: node-manager
+{{- end }}
