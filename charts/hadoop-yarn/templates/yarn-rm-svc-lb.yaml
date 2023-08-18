@@ -1,0 +1,28 @@
+{{- if .Values.yarn.resourceManager.exposePortsViaLB }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "hadoop-yarn.fullname" . }}-rm-ports
+  labels:
+    app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
+    helm.sh/chart: {{ include "hadoop-yarn.chart" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: yarn-ui
+spec:
+  ports:
+  - port: {{ .Values.yarn.resourceManager.webPort }}
+    name: web
+  - port: 8033
+    name: admin-addr
+  - port: 8031
+    name: res-tracker-addr
+  - port: 8032
+    name: addr
+  - port: 8030
+    name: scheduler-addr
+  type: LoadBalancer
+  selector:
+    app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/component: yarn-rm
+{{- end }}
