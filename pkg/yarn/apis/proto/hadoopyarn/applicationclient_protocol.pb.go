@@ -29,10 +29,11 @@
 package hadoopyarn
 
 import (
-	hadoopcommon "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
-	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
-	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
-	reflect "reflect"
+	"reflect"
+
+	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
+	"google.golang.org/protobuf/reflect/protoreflect"
+	"google.golang.org/protobuf/runtime/protoimpl"
 )
 
 const (

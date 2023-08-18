@@ -14,27 +14,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package main
+package noderesource
 
 import (
-	"log"
-
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	"github.com/koordinator-sh/koordinator/apis/extension"
 )
 
-func main() {
-	// Create YarnClient
-	yarnClient, _ := yarnclient.CreateYarnClient()
+const (
+	BatchCPU    = extension.BatchCPU
+	BatchMemory = extension.BatchMemory
 
-	request := &hadoopyarn.GetClusterNodesRequestProto{
-		NodeStates: []hadoopyarn.NodeStateProto{},
-	}
-	response, err := yarnClient.GetClusterNodes(request)
+	YarnClusterIDAnnotation = "yarn.hadoop.apache.org/cluster-id"
+)
 
-	if err != nil {
-		log.Fatal("GetClusterNode ", err)
-	}
-
-	log.Printf("GetClusterNode response %v", response)
-}
+const (
+	yarnNodeCPUResource    = "yarn_node_cpu_resource"
+	yarnNodeMemoryResource = "yarn_node_memory_resource"
+)

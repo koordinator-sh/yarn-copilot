@@ -27,7 +27,7 @@ import (
 
 func main() {
 	// Create YarnConfiguration
-	conf, err := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"))
+	conf, err := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"), "")
 	if err != nil {
 		log.Fatal("new yarn conf", err)
 	}
