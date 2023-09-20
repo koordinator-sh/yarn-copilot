@@ -19,35 +19,40 @@ package noderesource
 import (
 	"context"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/json"
+	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/cri-api/pkg/errors"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	"strconv"
 
+	"github.com/koordinator-sh/goyarn/pkg/yarn"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
+	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
 	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
-	"github.com/koordinator-sh/koordinator/apis/extension"
 )
 
 const (
 	Name          = "yarnresource"
 	YarnNamespace = "yarn"
-
-	yarnNodeNameAnnotation = "node.yarn.koordinator.sh"
-	yarnNodeIdAnnotation   = "yarn.hadoop.apache.org/node-id"
 )
 
 type YARNResourceSyncReconciler struct {
 	client.Client
-	yarnClient *yarnclient.YarnClient
+	yarnClient  *yarnclient.YarnClient
+	yarnClients map[string]*yarnclient.YarnClient
+	cache       *cache.Nodes
 }
 
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -62,45 +67,143 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 		return ctrl.Result{Requeue: true}, err
 	}
 
-	yarnNodeName, yarnNodePort, err := r.getYARNNodeID(node)
+	yarnNode, err := r.getYARNNode(node)
 	if err != nil {
 		klog.Warningf("fail to parse yarn node name for %v, error %v", node.Name, err)
 		return ctrl.Result{}, nil
 	}
-	if yarnNodeName == "" || yarnNodePort == 0 {
-		klog.V(3).Infof("skip for yarn node id not exist in node %v annotation %v", req.Name, yarnNodeNameAnnotation)
-		return ctrl.Result{}, nil
+	if yarnNode == nil || yarnNode.Name == "" || yarnNode.Port == 0 {
+		klog.V(3).Infof("skip for yarn node not exist on node %v, detail %+v", req.Name, yarnNode)
+		return ctrl.Result{}, r.updateYarnAllocatedResource(node, 0, 0)
 	}
 
 	// TODO exclude batch pod requested
-	batchCPU, cpuExist := node.Status.Allocatable[extension.BatchCPU]
-	batchMemory, memExist := node.Status.Allocatable[extension.BatchMemory]
-	if !cpuExist || !memExist {
-		klog.V(3).Infof("skip sync node %v, since batch cpu or memory not exist in allocatable %v", node.Name, node.Status.Allocatable)
-		return ctrl.Result{}, nil
+	batchCPU, batchMemory, err := r.GetNodeOfflineResource(node, yarnNode)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
+	klog.V(4).Infof("get node offline resource cpu: %d, memory: %d, name: %s", batchCPU.Value(), batchMemory.Value(), node.Name)
+
+	vcores, memoryMB := resourceReserved(batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
 
 	// TODO control update frequency
-	if err := r.updateYARNNodeResource(yarnNodeName, yarnNodePort, batchCPU, batchMemory); err != nil {
-		klog.Warningf("update batch resource to yarn node %v:%v failed, error %v", yarnNodeName, yarnNodePort, err)
+	if err := r.updateYARNNodeResource(yarnNode, vcores, memoryMB); err != nil {
+		klog.Warningf("update batch resource to yarn node %+v failed, k8s node name: %s, error %v", yarnNode, node.Name, err)
 		return ctrl.Result{Requeue: true}, err
 	}
-	klog.V(4).Infof("update node %v batch resource to yarn %v:%v finish, cpu-core %v, memory-mb %v",
-		node.Name, yarnNodeName, yarnNodePort, batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
+	klog.V(4).Infof("update batch resource to yarn node %+v finish, cpu-core %v, memory-mb %v, k8s node name: %s",
+		yarnNode, vcores, memoryMB, node.Name)
+
+	core, mb, err := r.getYARNNodeAllocatedResource(yarnNode)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	if err := r.updateYarnAllocatedResource(node, core, mb); err != nil {
+		return reconcile.Result{}, err
+	}
 	return ctrl.Result{}, nil
 }
 
-func Add(mgr ctrl.Manager) error {
-	yarnClient, err := yarnclient.CreateYarnClient()
+func (r *YARNResourceSyncReconciler) GetNodeOfflineResource(node *corev1.Node, yarnNode *yarn.YarnNode) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
+	batchCPU, cpuExist := node.Status.Allocatable[BatchCPU]
+	batchMemory, memExist := node.Status.Allocatable[BatchMemory]
+	if !cpuExist {
+		batchCPU = *resource.NewQuantity(0, resource.DecimalSI)
+	}
+	if !memExist {
+		batchMemory = *resource.NewQuantity(0, resource.BinarySI)
+	}
+	if node.Annotations == nil || len(node.Annotations[actualOfflineResourceAnnotationKey]) == 0 {
+		return
+	}
+	//cpu, mem, err := r.getYARNNodeAllocatedResource(yarnNode)
+	//if err != nil {
+	//	return
+	//}
+	//batchCPU.Add(*resource.NewQuantity(int64(cpu*1000), resource.DecimalSI))
+	//batchMemory.Add(*resource.NewQuantity(int64(mem*1024*1024), resource.BinarySI))
+	var actualResource corev1.ResourceList
+	err = json.Unmarshal([]byte(node.Annotations[actualOfflineResourceAnnotationKey]), &actualResource)
+	if err != nil {
+		return
+	}
+	batchCPU, cpuExist = actualResource[BatchCPU]
+	batchMemory, memExist = actualResource[BatchMemory]
+	if !cpuExist {
+		batchCPU = *resource.NewQuantity(0, resource.DecimalSI)
+	}
+	if !memExist {
+		batchMemory = *resource.NewQuantity(0, resource.BinarySI)
+	}
+	return
+}
+
+type ResourceInfo map[string]resource.Quantity
+
+type AllocatedResource map[string]*ResourceInfo
+
+func (r *YARNResourceSyncReconciler) updateYarnAllocatedResource(node *corev1.Node, vcores int32, memoryMB int64) error {
+	allocatedResource, err := r.GetAllocatedResource(node)
 	if err != nil {
 		return err
 	}
-	r := &YARNResourceSyncReconciler{
-		Client:     mgr.GetClient(),
-		yarnClient: yarnClient,
+	cpu := *resource.NewQuantity(int64(vcores), resource.DecimalSI)
+	memory := *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI)
+	allocatedResource["yarnAllocated"] = &ResourceInfo{
+		string(BatchCPU):    cpu,
+		string(BatchMemory): memory,
 	}
-	if err := r.yarnClient.Initialize(); err != nil {
+	return r.SetAllocatedResource(node, allocatedResource)
+}
+
+func (r *YARNResourceSyncReconciler) SetAllocatedResource(node *corev1.Node, resource AllocatedResource) error {
+	marshal, err := json.Marshal(resource)
+	if err != nil {
 		return err
+	}
+	newNode := node.DeepCopy()
+	newNode.Annotations[yarnNodeAllocatedResourceAnnotationKey] = string(marshal)
+	oldData, err := json.Marshal(node)
+	if err != nil {
+		return fmt.Errorf("failed to marshal the existing node %#v: %v", node, err)
+	}
+	newData, err := json.Marshal(newNode)
+	if err != nil {
+		return fmt.Errorf("failed to marshal the new node %#v: %v", newNode, err)
+	}
+
+	patchBytes, err := strategicpatch.CreateTwoWayMergePatch(oldData, newData, &corev1.Node{})
+	if err != nil {
+		return fmt.Errorf("failed to create a two-way merge patch: %v", err)
+	}
+	klog.Infof("update node %s", node.Name)
+	return r.Client.Patch(context.TODO(), newNode, client.RawPatch(types.StrategicMergePatchType, patchBytes))
+}
+
+func (r *YARNResourceSyncReconciler) GetAllocatedResource(node *corev1.Node) (AllocatedResource, error) {
+	if node.GetAnnotations() == nil || node.GetAnnotations()[yarnNodeAllocatedResourceAnnotationKey] == "" {
+		return map[string]*ResourceInfo{}, nil
+	}
+	var res map[string]*ResourceInfo
+	return res, json.Unmarshal([]byte(node.GetAnnotations()[yarnNodeAllocatedResourceAnnotationKey]), &res)
+}
+
+func Add(mgr ctrl.Manager) error {
+
+	clients, err := yarnclient.GetAllKnownClients()
+	if err != nil {
+		return err
+	}
+	nodeCache := cache.NewNodes(clients)
+	go nodeCache.Sync()
+	coll := NewYarn(nodeCache)
+	if _ = metrics.Registry.Register(coll); err != nil {
+		return err
+	}
+	r := &YARNResourceSyncReconciler{
+		Client:      mgr.GetClient(),
+		yarnClients: clients,
+		cache:       nodeCache,
 	}
 	return r.SetupWithManager(mgr)
 }
@@ -112,72 +215,84 @@ func (r *YARNResourceSyncReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNodeIDWithPodAnno(node *corev1.Node) (string, int32, error) {
-	podList := &corev1.PodList{}
+func (r *YARNResourceSyncReconciler) getYARNNodeManagerPod(node *corev1.Node) (*corev1.Pod, error) {
 	opts := []client.ListOption{
-		client.InNamespace(YarnNamespace),
-		client.MatchingLabels{"app.kubernetes.io/component": "node-manager"},
+		client.MatchingLabels{YarnNMComponentLabel: YarnNMComponentValue},
+		client.MatchingFields{"spec.nodeName": node.Name},
 	}
-
-	ctx := context.TODO()
-	if err := r.Client.List(ctx, podList, opts...); err != nil {
-		return "", 0, fmt.Errorf("get %v pods failed with error %v", YarnNamespace, err)
+	podList := &corev1.PodList{}
+	if err := r.Client.List(context.TODO(), podList, opts...); err != nil {
+		return nil, fmt.Errorf("get node manager pod failed on node %v with error %v", node.Name, err)
 	}
-	for _, pod := range podList.Items {
-		if pod.Spec.NodeName != node.Name {
-			continue
-		}
-		podAnnoNodeId, exists := pod.Annotations[yarnNodeIdAnnotation]
-		if !exists {
-			continue
-		}
-		tokens := strings.Split(podAnnoNodeId, ":")
-		if len(tokens) != 2 {
-			continue
-		}
-		port, err := strconv.Atoi(tokens[1])
-		if err != nil {
-			continue
-		}
-		return tokens[0], int32(port), nil
+	if len(podList.Items) == 0 {
+		return nil, nil
 	}
-	return "", 0, nil
+	if len(podList.Items) > 1 {
+		klog.Warningf("get %v node manager pod on node %v, will select the first one", len(podList.Items), node.Name)
+		return &podList.Items[0], nil
+	}
+	return &podList.Items[0], nil
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNodeID(node *corev1.Node) (string, int32, error) {
-	if node == nil || node.Annotations == nil {
-		return "", 0, nil
+// CPU暂时不考虑预留，内存预留5% 给nodemanager，且保证汇报资源量不大于100GB【业务方需求，调度任务过多云盘IO压力过大】
+func resourceReserved(vcore, memoryMB int64) (int32, int64) {
+	klog.V(3).Infof("before reserved %d %d", vcore, memoryMB)
+	// convert to yarn format.
+	memMB := int64(math.Floor(float64(memoryMB) * float64(0.95)))
+	memMBMax := int64(160 * 1024) // 大于160GB，默认只上报160GB
+	memMBMin := int64(10 * 1024)  // 小于10GB，默认不上报，禁止离线调度上来
+	if memMB >= memMBMax {
+		memMB = memMBMax
+	}
+	if memMB < memMBMin {
+		memMB = int64(0)
+	}
+	return int32(vcore), memMB
+}
+
+func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*yarn.YarnNode, error) {
+	if node == nil {
+		return nil, nil
 	}
 
-	// TODO get yarn node name from node manager pod attr
-	nodeID, exist := node.Annotations[yarnNodeNameAnnotation]
-	if !exist {
-		return r.getYARNNodeIDWithPodAnno(node)
-	}
-
-	attrs := strings.Split(nodeID, ":")
-	if len(attrs) != 2 {
-		return "", 0, fmt.Errorf("illegal format during parse yarn node name %v for node %v", nodeID, node.Name)
-	}
-	nodeName := attrs[0]
-	nodePort, err := strconv.ParseInt(attrs[1], 10, 64)
+	nmPod, err := r.getYARNNodeManagerPod(node)
 	if err != nil {
-		return "", 0, fmt.Errorf("illegal format during parse yarn node port %v for node %v", nodeID, node.Name)
+		return nil, err
+	} else if nmPod == nil {
+		return nil, nil
 	}
-	return nodeName, int32(nodePort), nil
+
+	podAnnoNodeId, exists := nmPod.Annotations[YarnNodeIdAnnotation]
+	if !exists {
+		return nil, fmt.Errorf("yarn nm id %v not exist in node annotationv", YarnNodeIdAnnotation)
+	}
+	tokens := strings.Split(podAnnoNodeId, ":")
+	if len(tokens) != 2 {
+		return nil, fmt.Errorf("yarn nm id %v format is illegal", podAnnoNodeId)
+	}
+	port, err := strconv.Atoi(tokens[1])
+	if err != nil {
+		return nil, fmt.Errorf("yarn nm id port %v format is illegal", podAnnoNodeId)
+	}
+
+	yarnNode := &yarn.YarnNode{
+		Name: tokens[0],
+		Port: int32(port),
+	}
+	if clusterID, exist := nmPod.Annotations[YarnClusterIDAnnotation]; exist {
+		yarnNode.ClusterID = clusterID
+	}
+	return yarnNode, nil
 }
 
-func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNodeName string, yarnNodePort int32, cpuMilli, memory resource.Quantity) error {
-	// convert to yarn format
-	vcores := int32(cpuMilli.ScaledValue(resource.Kilo))
-	memoryMB := memory.ScaledValue(resource.Mega)
+func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *yarn.YarnNode, vcores int32, memoryMB int64) error {
 
 	request := &yarnserver.UpdateNodeResourceRequestProto{
 		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
 			{
 				NodeId: &hadoopyarn.NodeIdProto{
-					Host: pointer.String(yarnNodeName),
-					Port: pointer.Int32(yarnNodePort),
+					Host: pointer.String(yarnNode.Name),
+					Port: pointer.Int32(yarnNode.Port),
 				},
 				ResourceOption: &hadoopyarn.ResourceOptionProto{
 					Resource: &hadoopyarn.ResourceProto{
@@ -188,9 +303,52 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNodeName string,
 			},
 		},
 	}
-	if resp, err := r.yarnClient.UpdateNodeResource(request); err != nil {
-		initErr := r.yarnClient.Reinitialize()
+	yarnClient, err := r.getYARNClient(yarnNode)
+	if err != nil {
+		return err
+	}
+	if resp, err := yarnClient.UpdateNodeResource(request); err != nil {
+		initErr := yarnClient.Reinitialize()
 		return fmt.Errorf("UpdateNodeResource resp %v, error %v, reinitialize error %v", resp, err, initErr)
 	}
 	return nil
+}
+
+func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *yarn.YarnNode) (*yarnclient.YarnClient, error) {
+	if yarnNode.ClusterID == "" && r.yarnClient != nil {
+		return r.yarnClient, nil
+	} else if yarnNode.ClusterID == "" && r.yarnClient == nil {
+		yarnClient, err := yarnclient.CreateYarnClient()
+		if err != nil {
+			return nil, err
+		}
+		r.yarnClient = yarnClient
+		return yarnClient, nil
+	}
+
+	//yarnNode.ClusterID != ""
+	if clusterClient, exist := r.yarnClients[yarnNode.ClusterID]; exist {
+		return clusterClient, nil
+	}
+	// create new client by cluster id
+	clusterClient, err := yarnclient.CreateYarnClientByClusterID(yarnNode.ClusterID)
+	if err != nil {
+		return nil, err
+	}
+	r.yarnClients[yarnNode.ClusterID] = clusterClient
+	return clusterClient, nil
+}
+
+func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *yarn.YarnNode) (vcores int32, memoryMB int64, err error) {
+	nodeResource, exist := r.cache.GetNodeResource(yarnNode)
+	if !exist {
+		return 0, 0, nil
+	}
+	if nodeResource.Used.VirtualCores != nil {
+		vcores = *nodeResource.Used.VirtualCores
+	}
+	if nodeResource.Used.Memory != nil {
+		memoryMB = *nodeResource.Used.Memory
+	}
+	return
 }

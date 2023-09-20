@@ -33,18 +33,29 @@ type YarnClient struct {
 	haEnabled            bool
 	activeRMAdminAddress *string
 	activeRMAddress      *string
+	clusterID            string
 }
 
 func CreateYarnClient() (*YarnClient, error) {
 	c := &YarnClient{}
-	if err := c.Initialize(); err != nil {
+	if err := c.initialize(); err != nil {
 		return nil, err
 	}
 	return c, nil
 }
 
-func (c *YarnClient) Initialize() error {
-	if conf, err := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR")); err == nil {
+func CreateYarnClientByClusterID(clusterID string) (*YarnClient, error) {
+	c := &YarnClient{
+		clusterID: clusterID,
+	}
+	if err := c.initialize(); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (c *YarnClient) initialize() error {
+	if conf, err := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"), c.clusterID); err == nil {
 		// TODO use flags for conf dir config
 		c.conf = conf
 	} else {
@@ -99,12 +110,12 @@ func (c *YarnClient) Close() {
 
 func (c *YarnClient) Reinitialize() error {
 	c.Close()
-	return c.Initialize()
+	return c.initialize()
 }
 
 func (c *YarnClient) UpdateNodeResource(request *yarnserver.UpdateNodeResourceRequestProto) (*yarnserver.UpdateNodeResourceResponseProto, error) {
 	if c.activeRMAdminAddress == nil && c.haEnabled {
-		if err := c.Initialize(); err != nil {
+		if err := c.initialize(); err != nil {
 			return nil, err
 		}
 	}
@@ -114,7 +125,7 @@ func (c *YarnClient) UpdateNodeResource(request *yarnserver.UpdateNodeResourceRe
 
 func (c *YarnClient) GetClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
 	if c.activeRMAdminAddress == nil && c.haEnabled {
-		if err := c.Initialize(); err != nil {
+		if err := c.initialize(); err != nil {
 			return nil, err
 		}
 	}

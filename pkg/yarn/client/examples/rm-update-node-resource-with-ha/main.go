@@ -27,7 +27,6 @@ import (
 func main() {
 	// Create YarnClient
 	yarnClient, _ := yarnclient.CreateYarnClient()
-	yarnClient.Initialize()
 
 	host := "0.0.0.0"
 	port := int32(8041)

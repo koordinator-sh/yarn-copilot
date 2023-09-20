@@ -220,7 +220,6 @@ func writeConnectionHeader(conn *connection, authProtocol yarnauth.AuthProtocol)
 	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
 		return err
 	}
-
 	// RPC_HEADER
 	if _, err := conn.con.Write(yarnauth.RPC_HEADER); err != nil {
 		klog.Warningf("conn.Write yarnauth.RPC_HEADER %v", err)
@@ -258,7 +257,6 @@ func writeConnectionContext(c *Client, conn *connection, connectionId *connectio
 	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
 		return err
 	}
-
 	// Create hadoop_common.IpcConnectionContextProto
 	ugi, _ := yarnauth.CreateSimpleUGIProto()
 	ipcCtxProto := hadoop_common.IpcConnectionContextProto{UserInfo: ugi, Protocol: &connectionId.protocol}
@@ -408,11 +406,6 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 	// Read first 4 bytes to get total-length
 	var totalLength int32 = -1
 	var totalLengthBytes [4]byte
-
-	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
-		return err
-	}
-
 	if _, err := conn.con.Read(totalLengthBytes[0:4]); err != nil {
 		klog.Warningf("conn.con.Read(totalLengthBytes) %v", err)
 		return err
@@ -475,7 +468,8 @@ func readDelimited(rawData []byte, msg proto.Message) (int, error) {
 		klog.Warningf("proto.DecodeVarint(rawData) returned zero")
 		return -1, nil
 	}
-	err := proto.Unmarshal(rawData[off:off+int(headerLength)], msg)
+	b := rawData[off : off+int(headerLength)]
+	err := proto.Unmarshal(b, msg)
 	if err != nil {
 		klog.Warningf("proto.Unmarshal(rawData[off:off+headerLength]) %v", err)
 		return -1, err
@@ -519,11 +513,9 @@ func sendSaslMessage(c *Client, conn *connection, message *hadoop_common.RpcSasl
 
 	totalLength := len(saslRpcHeaderProtoBytes) + sizeVarint(len(saslRpcHeaderProtoBytes)) + len(saslRpcMessageProtoBytes) + sizeVarint(len(saslRpcMessageProtoBytes))
 	var tLen int32 = int32(totalLength)
-
 	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
 		return err
 	}
-
 	if totalLengthBytes, err := yarnauth.ConvertFixedToBytes(tLen); err != nil {
 		klog.Warningf("ConvertFixedToBytes(totalLength) %v", err)
 		return err
