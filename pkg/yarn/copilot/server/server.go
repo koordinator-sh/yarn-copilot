@@ -26,10 +26,9 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
-
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/nm"
 )
@@ -56,33 +55,35 @@ func (y *YarnCopilotServer) Run(ctx context.Context) error {
 		Handler: e,
 	}
 	sockDir := filepath.Dir(y.unixPath)
-	err := os.MkdirAll(sockDir, os.ModePerm)
-	if err != nil {
-		klog.Fatal("mkdir for socket failed", err)
-	}
+	_ = os.MkdirAll(sockDir, os.ModePerm)
 	if system.FileExists(y.unixPath) {
-		os.Remove(y.unixPath)
+		_ = os.Remove(y.unixPath)
 	}
 	listener, err := net.Listen("unix", y.unixPath)
 	if err != nil {
 		fmt.Printf("Failed to listen UNIX socket: %v", err)
 		os.Exit(1)
 	}
-	defer os.Remove(y.unixPath)
-	go func() {
-		err := server.Serve(listener)
-		if err != nil {
-			klog.Fatal("start serve failed", err)
-		}
+	defer func() {
+		_ = os.Remove(y.unixPath)
 	}()
-
-	<-ctx.Done()
-	klog.Info("graceful shutdown")
-	if err := server.Shutdown(ctx); err != nil {
-		klog.Errorf("Server forced to shutdown: %v", err)
+	go func() {
+		_ = server.Serve(listener)
+	}()
+	//for {
+	//	select {
+	//	case <-ctx.Done():
+	//
+	//	}
+	//}
+	for range ctx.Done() {
+		klog.Info("graceful shutdown")
+		if err := server.Shutdown(ctx); err != nil {
+			klog.Errorf("Server forced to shutdown: %v", err)
+			return err
+		}
 	}
 	return nil
-
 }
 
 func (y *YarnCopilotServer) Health(ctx *gin.Context) {
@@ -110,6 +111,9 @@ func (y *YarnCopilotServer) ListContainers(ctx *gin.Context) {
 	}
 	res := make([]*ContainerInfo, 0, len(listContainers.Containers.Items))
 	for _, container := range listContainers.Containers.Items {
+		if container.IsFinalState() {
+			continue
+		}
 		res = append(res, ParseContainerInfo(&container, y.mgr))
 	}
 	ctx.JSON(http.StatusOK, res)
@@ -140,6 +144,7 @@ type ContainerInfo struct {
 	UID             string            `json:"uid"`
 	Labels          map[string]string `json:"labels"`
 	Annotations     map[string]string `json:"annotations"`
+	Priority        int32             `json:"priority"`
 	CreateTimestamp time.Time         `json:"createTimestamp"`
 
 	CgroupDir   string                  `json:"cgroupDir"`

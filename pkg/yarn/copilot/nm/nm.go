@@ -26,12 +26,12 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
-	"k8s.io/klog/v2"
-
-	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/utils"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
+	"k8s.io/klog/v2"
+
+	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/utils"
 )
 
 const (
@@ -121,7 +121,7 @@ func (n *NodeMangerOperator) syncMemoryCgroup(stop <-chan struct{}) error {
 func (n *NodeMangerOperator) syncNoneProcCgroup() {
 	klog.V(5).Info("syncNoneProcCgroup")
 	cpuPath := n.GenerateCgroupFullPath(system.CgroupCPUDir)
-	err := filepath.Walk(cpuPath, func(path string, info os.FileInfo, err error) error {
+	_ = filepath.Walk(cpuPath, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			klog.Warningf("ignore file %s error:%s", path, err.Error())
 			return err
@@ -144,9 +144,6 @@ func (n *NodeMangerOperator) syncNoneProcCgroup() {
 		}
 		return nil
 	})
-	if err != nil {
-		klog.Errorf("walk cpu cgroup dir failed, error %v", err)
-	}
 }
 
 func (n *NodeMangerOperator) syncNMEndpoint() {
@@ -168,7 +165,7 @@ func (n *NodeMangerOperator) syncNMEndpoint() {
 func (n *NodeMangerOperator) syncAllCgroup() {
 	subDirFunc := func(dir string) map[string]struct{} {
 		res := map[string]struct{}{}
-		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				klog.Warningf("ignore file %s error:%s", path, err.Error())
 				return err
@@ -179,9 +176,6 @@ func (n *NodeMangerOperator) syncAllCgroup() {
 			}
 			return nil
 		})
-		if err != nil {
-			klog.Errorf("walk cpu cgroup dir failed, error %v", err)
-		}
 		return res
 	}
 	cpuList := subDirFunc(filepath.Join(n.CgroupRoot, system.CgroupCPUDir, n.CgroupPath))
@@ -222,7 +216,6 @@ func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
 		klog.Error("fail to create memory dir: %s, error: %s", memCgroupPath, err.Error())
 		return
 	}
-
 	if _, err := system.CommonFileWriteIfDifferent(filepath.Join(memCgroupPath, MemoryMoveChargeAtImmigrateName), "3"); err != nil {
 		klog.Error(err)
 		return
@@ -261,14 +254,20 @@ func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
 
 func (n *NodeMangerOperator) ensureCgroupDir(dir string) error {
 	klog.V(5).Infof("ensure cgroup dir %s", dir)
-	_, err := os.Open(dir)
+	f, err := os.Stat(dir)
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	if err == nil {
-		return nil
+	if os.IsNotExist(err) {
+		if err := os.MkdirAll(dir, 0777); err != nil {
+			return err
+		}
+		return os.Chmod(dir, 0777)
 	}
-	return os.MkdirAll(dir, 0777)
+	if f.Mode().Perm() != 0777 {
+		return os.Chmod(dir, 0777)
+	}
+	return nil
 }
 
 // KillContainer kill process group for target container
@@ -297,24 +296,6 @@ type Containers struct {
 	Containers struct {
 		Items []YarnContainer `json:"container"`
 	} `json:"containers"`
-}
-
-type YarnContainer struct {
-	Id                  string   `json:"id"`
-	Appid               string   `json:"appid"`
-	State               string   `json:"state"`
-	ExitCode            int      `json:"exitCode"`
-	Diagnostics         string   `json:"diagnostics"`
-	User                string   `json:"user"`
-	TotalMemoryNeededMB int      `json:"totalMemoryNeededMB"`
-	TotalVCoresNeeded   int      `json:"totalVCoresNeeded"`
-	ContainerLogsLink   string   `json:"containerLogsLink"`
-	NodeId              string   `json:"nodeId"`
-	MemUsed             float64  `json:"memUsed"`
-	MemMaxed            float64  `json:"memMaxed"`
-	CpuUsed             float64  `json:"cpuUsed"`
-	CpuMaxed            float64  `json:"cpuMaxed"`
-	ContainerLogFiles   []string `json:"containerLogFiles"`
 }
 
 func (n *NodeMangerOperator) ListContainers() (*Containers, error) {

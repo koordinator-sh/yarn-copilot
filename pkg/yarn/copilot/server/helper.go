@@ -30,6 +30,7 @@ func ParseContainerInfo(yarnContainer *nm.YarnContainer, op *nm.NodeMangerOperat
 		UID:         yarnContainer.Id,
 		CgroupDir:   op.GenerateCgroupPath(yarnContainer.Id),
 		HostNetwork: true,
+		Priority:    1,
 		Resources: corev1.ResourceRequirements{
 			Limits: map[corev1.ResourceName]resource.Quantity{
 				corev1.ResourceCPU:    *resource.NewMilliQuantity(int64(yarnContainer.TotalVCoresNeeded*1000), resource.DecimalSI),
