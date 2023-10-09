@@ -33,6 +33,16 @@ var (
 		"yarn node memory resource",
 		[]string{"instance", "cluster"},
 		nil)
+	yarnNodeCPUAllocatedMetric = prometheus.NewDesc(
+		yarnNodeCPUAllocatedResource,
+		"yarn node cpu resource",
+		[]string{"instance", "cluster"},
+		nil)
+	yarnNodeMemoryAllocatedMetric = prometheus.NewDesc(
+		yarnNodeMemoryAllocatedResource,
+		"yarn node memory resource",
+		[]string{"instance", "cluster"},
+		nil)
 )
 
 type Yarn struct {
@@ -46,6 +56,8 @@ func NewYarn(cache *cache.Nodes) *Yarn {
 func (y *Yarn) Describe(descs chan<- *prometheus.Desc) {
 	descs <- yarnNodeCPUMetric
 	descs <- yarnNodeMemoryMetric
+	descs <- yarnNodeCPUAllocatedMetric
+	descs <- yarnNodeMemoryAllocatedMetric
 }
 
 func (y *Yarn) Collect(metrics chan<- prometheus.Metric) {
@@ -62,6 +74,20 @@ func (y *Yarn) Collect(metrics chan<- prometheus.Metric) {
 				yarnNodeMemoryMetric,
 				prometheus.GaugeValue,
 				float64(node.Capability.GetMemory()*1024*1024),
+				node.NodeId.GetHost(),
+				clusterID,
+			)
+			metrics <- prometheus.MustNewConstMetric(
+				yarnNodeCPUAllocatedMetric,
+				prometheus.GaugeValue,
+				float64(node.Used.GetVirtualCores()),
+				node.NodeId.GetHost(),
+				clusterID,
+			)
+			metrics <- prometheus.MustNewConstMetric(
+				yarnNodeMemoryAllocatedMetric,
+				prometheus.GaugeValue,
+				float64(node.Used.GetMemory()*1024*1024),
 				node.NodeId.GetHost(),
 				clusterID,
 			)
