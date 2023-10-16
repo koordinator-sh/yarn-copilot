@@ -1,47 +1,78 @@
+installation:
+  namespace: hadoop-yarn
+
 image:
-  repository: registry.cn-shanghai.aliyuncs.com/sofastack/apache-hadoop
-  tag: 3.3.2
+  repository: registry.cn-hangzhou.aliyuncs.com/koordinator-sh/apache-hadoop
+  tag: 3.3.2-v1.0
   pullPolicy: IfNotPresent
 
 # The version of the hadoop libraries being used in the image.
 hadoopVersion: 3.3.2
 logLevel: INFO
 
-# Select antiAffinity as either hard or soft, default is hard.
-antiAffinity: "hard"
-
-# Use host network mode if you do not have an underlay
-# network cni environment.
-hostNetwork: true
-
 yarn:
   resourceManager:
-    # TODO: find a way to determine rm hostname automatically when deployed
-    #   in host network mode or with ha enabled.
-    hostName: ""
-
     webPort: 8088
-    exposePortsViaLB: true
 
     resources:
       requests:
-        memory: "256Mi"
-        cpu: "10m"
+        cpu: "1"
+        memory: "2Gi"
       limits:
-        memory: "2048Mi"
-        cpu: "2000m"
+        cpu: "2"
+        memory: "4Gi"
+
     webProxy:
       port: 8054
 
+    nodeSelector:
+      # yarn.hadoop.apache.org/node-role: yarn-rm
+
+    serviceType: ClusterIP
+    serviceName: resource-manager
+
   nodeManager:
-    exposePortsViaLB: true
-
-    # The number of YARN NodeManager instances.
-    replicas: 3
-
     # CPU and memory resources allocated to each node manager pod.
     # This should be tuned to fit your workload.
     resources:
       requests:
-        memory: "2048Mi"
-        cpu: "1000m"
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+
+    # use batch cpu and batch memory for nm pod
+    useBatchResource: true
+
+    nodeSelector:
+      # yarn.hadoop.apache.org/node-role: yarn-nm
+
+    serviceName: node-manager
+
+  config:
+    yarnSite:
+      cgroupsHierarchy: /kubepods.slice/kubepods-besteffort.slice/hadoop-yarn
+
+# hdfs components only used for demo, will run as independent containers inside yarn pods
+hdfs:
+  enabled: true
+  nameNode:
+    httpPort: 9870
+
+    resources:
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "2"
+        memory: "4Gi"
+
+  dataNode:
+    resources:
+      requests:
+        cpu: "1"
+        memory: "1Gi"
+      limits:
+        cpu: "1"
+        memory: "1Gi"

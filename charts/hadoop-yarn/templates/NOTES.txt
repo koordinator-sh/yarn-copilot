@@ -1,15 +1,19 @@
+0. Check running state of yarn pods
+   kubectl get pod -n {{ .Values.installation.namespace }}
+
 1. You can list the yarn nodes by running this command:
-   kubectl exec -n {{ .Release.Namespace }} -it {{ include "hadoop-yarn.fullname" . }}-yarn-rm-0 -- /opt/hadoop/bin/yarn node -list
+   kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} -- /opt/hadoop/bin/yarn node -list
 
 2. Create a port-forward to the yarn resource manager UI:
-   kubectl port-forward -n {{ .Release.Namespace }} {{ include "hadoop-yarn.fullname" . }}-yarn-rm-0 {{ .Values.yarn.resourceManager.webPort}}:{{.Values.yarn.resourceManager.webPort}}
+   kubectl port-forward -n {{ .Values.installation.namespace }} service/{{ .Values.yarn.resourceManager.serviceName }} {{ .Values.yarn.resourceManager.webPort}}:{{.Values.yarn.resourceManager.webPort}}
 
    Then open the ui in your browser:
 
    open http://localhost:{{.Values.yarn.resourceManager.webPort}}
 
 3. You can run included hadoop tests like this:
-   kubectl exec -n {{ .Release.Namespace }} -it {{ include "hadoop-yarn.fullname" . }}-yarn-nm-0 -- /opt/hadoop/bin/hadoop jar /opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-client-jobclient-{{ .Values.hadoopVersion }}-tests.jar TestDFSIO -write -nrFiles 5 -fileSize 128MB -resFile /tmp/TestDFSIOwrite.txt
+   kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} yarn-rm -- /opt/hadoop/bin/hadoop jar /opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-client-jobclient-{{ .Values.hadoopVersion }}-tests.jar TestDFSIO -write -nrFiles 5 -fileSize 128MB -resFile /tmp/TestDFSIOwrite.txt
+   kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} yarn-rm -- /opt/spark/bin/spark-submit --master yarn --deploy-mode cluster --class org.apache.spark.examples.SparkPi /opt/spark/examples/jars/spark-examples_2.12-3.0.0.jar 1000
 
 4. You can list the mapreduce jobs like this:
-   kubectl exec -n {{ .Release.Namespace }} -it {{ include "hadoop-yarn.fullname" . }}-yarn-rm-0 -- /opt/hadoop/bin/mapred job -list
+   kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} -- /opt/hadoop/bin/mapred job -list
