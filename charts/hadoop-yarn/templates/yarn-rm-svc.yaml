@@ -1,13 +1,13 @@
-{{- if .Values.yarn.resourceManager.exposePortsViaLB }}
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "hadoop-yarn.fullname" . }}-rm-ports
+  namespace: {{ .Values.installation.namespace }}
+  name: {{ .Values.yarn.resourceManager.serviceName }}
   labels:
     app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
     helm.sh/chart: {{ include "hadoop-yarn.chart" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
-    app.kubernetes.io/component: yarn-ui
+    app.kubernetes.io/component: yarn-rm-service
 spec:
   ports:
   - port: {{ .Values.yarn.resourceManager.webPort }}
@@ -20,9 +20,14 @@ spec:
     name: addr
   - port: 8030
     name: scheduler-addr
-  type: LoadBalancer
+{{- if .Values.hdfs.enabled }}
+  - port: 9000
+    name: hdfs-namenode
+  - port: {{ .Values.hdfs.nameNode.httpPort }}
+    name: hdfs-http
+{{- end }}
+  type: {{ .Values.yarn.resourceManager.serviceType }}
   selector:
     app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
     app.kubernetes.io/instance: {{ .Release.Name }}
     app.kubernetes.io/component: yarn-rm
-{{- end }}

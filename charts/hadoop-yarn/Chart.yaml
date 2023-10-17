@@ -2,5 +2,5 @@ apiVersion: v2
 name: hadoop-yarn
 description: A Helm chart for hadoop yarn.
 type: application
-version: 1.0.0
+version: 3.3.2
 appVersion: "3.3.2"

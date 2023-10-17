@@ -1,7 +1,15 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  labels:
+    controle-plane: koordinator
+  name: {{ .Values.installation.namespace }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "hadoop-yarn.fullname" . }}-yarn-rm
+  name: {{ include "hadoop-yarn.fullname" . }}-rm
+  namespace: {{ .Values.installation.namespace }}
   annotations:
     checksum/config: {{ include (print $.Template.BasePath "/hadoop-configmap.yaml") . | sha256sum }}
   labels:
@@ -23,32 +31,12 @@ spec:
         app.kubernetes.io/instance: {{ .Release.Name }}
         app.kubernetes.io/component: yarn-rm
     spec:
-      affinity:
-        podAntiAffinity:
-        {{- if eq .Values.antiAffinity "hard" }}
-          requiredDuringSchedulingIgnoredDuringExecution:
-          - topologyKey: "kubernetes.io/hostname"
-            labelSelector:
-              matchLabels:
-                app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
-                app.kubernetes.io/instance: {{ .Release.Name }}
-                app.kubernetes.io/component: yarn-rm
-        {{- else if eq .Values.antiAffinity "soft" }}
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 5
-            podAffinityTerm:
-              topologyKey: "kubernetes.io/hostname"
-              labelSelector:
-                matchLabels:
-                  app.kubernetes.io/name: {{ include "hadoop-yarn.name" . }}
-                  app.kubernetes.io/instance: {{ .Release.Name }}
-                  app.kubernetes.io/component: yarn-rm
-        {{- end }}
       terminationGracePeriodSeconds: 0
-      hostNetwork: {{ .Values.hostNetwork }}
+      dnsPolicy: ClusterFirst
+      # hostNetwork: true
       # Let rm pod schedule to node with specific label.
       nodeSelector:
-        yarn.hadoop.apache.org/node-role: yarn-rm
+{{ toYaml .Values.yarn.resourceManager.nodeSelector | indent 8 }}
       containers:
       - name: yarn-rm
         image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -81,6 +69,39 @@ spec:
         volumeMounts:
         - name: hadoop-config
           mountPath: /tmp/hadoop-config
+{{- if .Values.hdfs.enabled }}
+      - name: hdfs-nn
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy | quote }}
+        ports:
+          - containerPort: {{ .Values.hdfs.nameNode.httpPort }}
+            name: web
+        command:
+          - "/bin/bash"
+          - "/tmp/hadoop-config/bootstrap.sh"
+          - "-d"
+        resources:
+{{ toYaml .Values.hdfs.nameNode.resources | indent 10 }}
+        env:
+        - name: YARN_ROLE
+          value: hdfs-nn
+        readinessProbe:
+          httpGet:
+            path: /
+            port: {{ .Values.hdfs.nameNode.httpPort }}
+          initialDelaySeconds: 5
+          timeoutSeconds: 2
+        livenessProbe:
+          failureThreshold: 5
+          httpGet:
+            path: /
+            port: {{ .Values.hdfs.nameNode.httpPort }}
+          initialDelaySeconds: 10
+          timeoutSeconds: 2
+        volumeMounts:
+          - name: hadoop-config
+            mountPath: /tmp/hadoop-config
+{{- end }}
       volumes:
       - name: hadoop-config
         configMap:
