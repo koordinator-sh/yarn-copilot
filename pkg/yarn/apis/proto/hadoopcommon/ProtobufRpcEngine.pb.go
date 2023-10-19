@@ -49,7 +49,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
+// *
 // This message is the header for the Protobuf Rpc Engine
 // when sending a RPC request from  RPC client to the RPC server.
 // The actual request (serialized as protobuf) follows this request.

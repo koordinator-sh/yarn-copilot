@@ -43,8 +43,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
-//  Get groups for user request.
+// *
+//
+//	Get groups for user request.
 type GetGroupsForUserRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -92,7 +93,7 @@ func (x *GetGroupsForUserRequestProto) GetUser() string {
 	return ""
 }
 
-//*
+// *
 // Response for get groups.
 type GetGroupsForUserResponseProto struct {
 	state         protoimpl.MessageState

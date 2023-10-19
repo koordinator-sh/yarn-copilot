@@ -19,7 +19,7 @@ package conf
 
 import (
 	"encoding/xml"
-	"io/ioutil"
+	"io"
 	"os"
 	"strconv"
 
@@ -115,7 +115,7 @@ func NewConfigurationResources(hadoopConfDir string, resources []Resource, prefi
 			klog.Warningf("Couldn't open resource: ", err)
 			return nil, err
 		}
-		confData, err := ioutil.ReadAll(conf)
+		confData, err := io.ReadAll(conf)
 		if err != nil {
 			klog.Warningf("Couldn't read resource: ", err)
 			return nil, err

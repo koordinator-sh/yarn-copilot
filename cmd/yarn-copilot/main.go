@@ -21,7 +21,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
+	statesinformer "github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer/impl"
 	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 

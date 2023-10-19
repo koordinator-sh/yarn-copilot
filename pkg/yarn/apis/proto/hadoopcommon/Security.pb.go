@@ -43,7 +43,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
+// *
 // Security token identifier
 type TokenProto struct {
 	state         protoimpl.MessageState

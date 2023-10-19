@@ -19,7 +19,7 @@ package nm
 import (
 	"fmt"
 
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
+	statesinformer "github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer/impl"
 )
 
 const (

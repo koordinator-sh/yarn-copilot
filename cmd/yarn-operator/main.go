@@ -105,7 +105,7 @@ func main() {
 		LeaderElection:             enableLeaderElection,
 		LeaderElectionID:           "koordinator-yarn-operator",
 		LeaderElectionNamespace:    leaderElectionNamespace,
-		LeaderElectionResourceLock: resourcelock.ConfigMapsResourceLock,
+		LeaderElectionResourceLock: resourcelock.ConfigMapsLeasesResourceLock,
 		Namespace:                  namespace,
 		SyncPeriod:                 syncPeriod,
 		NewClient:                  utilclient.NewClient,
