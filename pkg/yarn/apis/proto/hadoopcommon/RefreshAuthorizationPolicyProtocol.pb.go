@@ -43,8 +43,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
-//  Refresh service acl request.
+// *
+//
+//	Refresh service acl request.
 type RefreshServiceAclRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -83,7 +84,7 @@ func (*RefreshServiceAclRequestProto) Descriptor() ([]byte, []int) {
 	return file_RefreshAuthorizationPolicyProtocol_proto_rawDescGZIP(), []int{0}
 }
 
-//*
+// *
 // void response
 type RefreshServiceAclResponseProto struct {
 	state         protoimpl.MessageState

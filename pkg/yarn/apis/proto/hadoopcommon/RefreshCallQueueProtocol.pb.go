@@ -43,8 +43,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
-//  Refresh callqueue request.
+// *
+//
+//	Refresh callqueue request.
 type RefreshCallQueueRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -83,7 +84,7 @@ func (*RefreshCallQueueRequestProto) Descriptor() ([]byte, []int) {
 	return file_RefreshCallQueueProtocol_proto_rawDescGZIP(), []int{0}
 }
 
-//*
+// *
 // void response.
 type RefreshCallQueueResponseProto struct {
 	state         protoimpl.MessageState

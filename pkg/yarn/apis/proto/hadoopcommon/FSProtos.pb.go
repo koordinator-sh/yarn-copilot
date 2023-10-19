@@ -211,7 +211,6 @@ func (x *FsPermissionProto) GetPerm() uint32 {
 	return 0
 }
 
-//
 // FileStatus encoding. Field IDs match those from HdfsFileStatusProto, but
 // cross-serialization is not an explicitly supported use case. Unlike HDFS,
 // most fields are optional and do not define defaults.
@@ -375,7 +374,7 @@ func (x *FileStatusProto) GetFlags() uint32 {
 	return Default_FileStatusProto_Flags
 }
 
-//*
+// *
 // Placeholder type for consistent basic FileSystem operations.
 type LocalFileSystemPathHandleProto struct {
 	state         protoimpl.MessageState

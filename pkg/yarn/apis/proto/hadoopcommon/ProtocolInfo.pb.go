@@ -43,7 +43,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
+// *
 // Request to get protocol versions for all supported rpc kinds.
 type GetProtocolVersionsRequestProto struct {
 	state         protoimpl.MessageState
@@ -92,7 +92,7 @@ func (x *GetProtocolVersionsRequestProto) GetProtocol() string {
 	return ""
 }
 
-//*
+// *
 // Protocol version with corresponding rpc kind.
 type ProtocolVersionProto struct {
 	state         protoimpl.MessageState
@@ -149,7 +149,7 @@ func (x *ProtocolVersionProto) GetVersions() []uint64 {
 	return nil
 }
 
-//*
+// *
 // Get protocol version response.
 type GetProtocolVersionsResponseProto struct {
 	state         protoimpl.MessageState
@@ -198,7 +198,7 @@ func (x *GetProtocolVersionsResponseProto) GetProtocolVersions() []*ProtocolVers
 	return nil
 }
 
-//*
+// *
 // Get protocol signature request.
 type GetProtocolSignatureRequestProto struct {
 	state         protoimpl.MessageState
@@ -255,7 +255,7 @@ func (x *GetProtocolSignatureRequestProto) GetRpcKind() string {
 	return ""
 }
 
-//*
+// *
 // Get protocol signature response.
 type GetProtocolSignatureResponseProto struct {
 	state         protoimpl.MessageState

@@ -36,7 +36,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
@@ -104,7 +103,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	return ctrl.Result{}, nil
 }
 
-func (r *YARNResourceSyncReconciler) GetNodeOfflineResource(node *corev1.Node, yarnNode *yarn.YarnNode) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
+func (r *YARNResourceSyncReconciler) GetNodeOfflineResource(node *corev1.Node, yarnNode *cache.YarnNode) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
 	batchCPU, cpuExist := node.Status.Allocatable[BatchCPU]
 	batchMemory, memExist := node.Status.Allocatable[BatchMemory]
 	if !cpuExist {
@@ -250,7 +249,7 @@ func resourceReserved(vcore, memoryMB int64) (int32, int64) {
 	return int32(vcore), memMB
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*yarn.YarnNode, error) {
+func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*cache.YarnNode, error) {
 	if node == nil {
 		return nil, nil
 	}
@@ -275,7 +274,7 @@ func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*yarn.YarnN
 		return nil, fmt.Errorf("yarn nm id port %v format is illegal", podAnnoNodeId)
 	}
 
-	yarnNode := &yarn.YarnNode{
+	yarnNode := &cache.YarnNode{
 		Name: tokens[0],
 		Port: int32(port),
 	}
@@ -285,7 +284,7 @@ func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*yarn.YarnN
 	return yarnNode, nil
 }
 
-func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *yarn.YarnNode, vcores int32, memoryMB int64) error {
+func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.YarnNode, vcores int32, memoryMB int64) error {
 
 	request := &yarnserver.UpdateNodeResourceRequestProto{
 		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
@@ -314,7 +313,7 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *yarn.YarnN
 	return nil
 }
 
-func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *yarn.YarnNode) (*yarnclient.YarnClient, error) {
+func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *cache.YarnNode) (*yarnclient.YarnClient, error) {
 	if yarnNode.ClusterID == "" && r.yarnClient != nil {
 		return r.yarnClient, nil
 	} else if yarnNode.ClusterID == "" && r.yarnClient == nil {
@@ -339,7 +338,7 @@ func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *yarn.YarnNode) (*ya
 	return clusterClient, nil
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *yarn.YarnNode) (vcores int32, memoryMB int64, err error) {
+func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *cache.YarnNode) (vcores int32, memoryMB int64, err error) {
 	nodeResource, exist := r.cache.GetNodeResource(yarnNode)
 	if !exist {
 		return 0, 0, nil

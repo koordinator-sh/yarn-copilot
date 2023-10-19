@@ -43,7 +43,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
+// *
 // RpcKind determine the rpcEngine and the serialization of the rpc request
 type RpcKindProto int32
 
@@ -378,7 +378,7 @@ func (RpcSaslProto_SaslState) EnumDescriptor() ([]byte, []int) {
 	return file_RpcHeader_proto_rawDescGZIP(), []int{4, 0}
 }
 
-//*
+// *
 // Used to pass through the information necessary to continue
 // a trace after an RPC is made. All we need is the traceid
 // (so we know the overarching trace this message is a part of), and
@@ -439,7 +439,7 @@ func (x *RPCTraceInfoProto) GetParentId() int64 {
 	return 0
 }
 
-//*
+// *
 // Used to pass through the call context entry after an RPC is made.
 type RPCCallerContextProto struct {
 	state         protoimpl.MessageState
@@ -606,7 +606,7 @@ func (x *RpcRequestHeaderProto) GetStateId() int64 {
 	return 0
 }
 
-//*
+// *
 // Rpc Response Header
 // +------------------------------------------------------------------+
 // | Rpc total response length in bytes (4 bytes int)                 |

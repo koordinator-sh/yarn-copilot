@@ -43,7 +43,7 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
+// *
 // Spec for UserInformationProto is specified in ProtoUtil#makeIpcConnectionContext
 type UserInformationProto struct {
 	state         protoimpl.MessageState
@@ -100,7 +100,7 @@ func (x *UserInformationProto) GetRealUser() string {
 	return ""
 }
 
-//*
+// *
 // The connection context is sent as part of the connection establishment.
 // It establishes the context for ALL Rpc calls within the connection.
 type IpcConnectionContextProto struct {

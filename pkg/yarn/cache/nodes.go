@@ -23,7 +23,6 @@ import (
 
 	"k8s.io/klog/v2"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
 )
@@ -43,7 +42,7 @@ func NewNodes(yarnClients map[string]*yarnclient.YarnClient) *Nodes {
 	}
 }
 
-func (r *Nodes) GetNodeResource(yarnNode *yarn.YarnNode) (*hadoopyarn.NodeReportProto, bool) {
+func (r *Nodes) GetNodeResource(yarnNode *YarnNode) (*hadoopyarn.NodeReportProto, bool) {
 	if yarnNode == nil {
 		return nil, false
 	}

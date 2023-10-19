@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-resty/resty/v2"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/pleg"
-	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
+	statesinformer "github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer/impl"
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/util/system"
 	"k8s.io/klog/v2"
 

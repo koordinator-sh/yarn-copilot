@@ -43,8 +43,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
-//  Refresh user to group mappings request.
+// *
+//
+//	Refresh user to group mappings request.
 type RefreshUserToGroupsMappingsRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -83,7 +84,7 @@ func (*RefreshUserToGroupsMappingsRequestProto) Descriptor() ([]byte, []int) {
 	return file_RefreshUserMappingsProtocol_proto_rawDescGZIP(), []int{0}
 }
 
-//*
+// *
 // void response
 type RefreshUserToGroupsMappingsResponseProto struct {
 	state         protoimpl.MessageState
@@ -123,7 +124,7 @@ func (*RefreshUserToGroupsMappingsResponseProto) Descriptor() ([]byte, []int) {
 	return file_RefreshUserMappingsProtocol_proto_rawDescGZIP(), []int{1}
 }
 
-//*
+// *
 // Refresh superuser configuration request.
 type RefreshSuperUserGroupsConfigurationRequestProto struct {
 	state         protoimpl.MessageState
@@ -163,7 +164,7 @@ func (*RefreshSuperUserGroupsConfigurationRequestProto) Descriptor() ([]byte, []
 	return file_RefreshUserMappingsProtocol_proto_rawDescGZIP(), []int{2}
 }
 
-//*
+// *
 // void response
 type RefreshSuperUserGroupsConfigurationResponseProto struct {
 	state         protoimpl.MessageState

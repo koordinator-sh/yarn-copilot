@@ -60,8 +60,8 @@ func getChallengeParams(challenge string) (map[string]string, error) {
 	return challengeParams, nil
 }
 
-//we only support a very specific digest-md5 mechanism for the moment
-//multiple realm, qop not supported
+// we only support a very specific digest-md5 mechanism for the moment
+// multiple realm, qop not supported
 func validateChallengeParameters(challengeParams map[string]string) error {
 	var errString string
 

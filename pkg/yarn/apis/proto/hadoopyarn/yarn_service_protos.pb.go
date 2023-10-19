@@ -280,9 +280,9 @@ func (LocalizationStateProto) EnumDescriptor() ([]byte, []int) {
 	return file_yarn_service_protos_proto_rawDescGZIP(), []int{3}
 }
 
-//////////////////////////////////////////////////////
-/////// AM_RM_Protocol ///////////////////////////////
-//////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////
+// ///// AM_RM_Protocol ///////////////////////////////
+// ////////////////////////////////////////////////////
 type RegisterApplicationMasterRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -3897,7 +3897,7 @@ func (*CommitResponseProto) Descriptor() ([]byte, []int) {
 	return file_yarn_service_protos_proto_rawDescGZIP(), []int{67}
 }
 
-//// bulk API records
+// // bulk API records
 type StartContainersRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

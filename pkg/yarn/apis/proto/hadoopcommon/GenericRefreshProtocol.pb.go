@@ -43,8 +43,9 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-//*
-//  Refresh request.
+// *
+//
+//	Refresh request.
 type GenericRefreshRequestProto struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -100,7 +101,7 @@ func (x *GenericRefreshRequestProto) GetArgs() []string {
 	return nil
 }
 
-//*
+// *
 // A single response from a refresh handler.
 type GenericRefreshResponseProto struct {
 	state         protoimpl.MessageState
@@ -165,7 +166,7 @@ func (x *GenericRefreshResponseProto) GetSenderName() string {
 	return ""
 }
 
-//*
+// *
 // Collection of responses from zero or more handlers.
 type GenericRefreshResponseCollectionProto struct {
 	state         protoimpl.MessageState

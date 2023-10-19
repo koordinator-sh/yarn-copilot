@@ -211,7 +211,7 @@ func (x *HAStateChangeRequestInfoProto) GetReqSource() HARequestSource {
 	return HARequestSource_REQUEST_BY_USER
 }
 
-//*
+// *
 // void request
 type MonitorHealthRequestProto struct {
 	state         protoimpl.MessageState
@@ -251,7 +251,7 @@ func (*MonitorHealthRequestProto) Descriptor() ([]byte, []int) {
 	return file_HAServiceProtocol_proto_rawDescGZIP(), []int{1}
 }
 
-//*
+// *
 // void response
 type MonitorHealthResponseProto struct {
 	state         protoimpl.MessageState
@@ -291,7 +291,7 @@ func (*MonitorHealthResponseProto) Descriptor() ([]byte, []int) {
 	return file_HAServiceProtocol_proto_rawDescGZIP(), []int{2}
 }
 
-//*
+// *
 // void request
 type TransitionToActiveRequestProto struct {
 	state         protoimpl.MessageState
@@ -340,7 +340,7 @@ func (x *TransitionToActiveRequestProto) GetReqInfo() *HAStateChangeRequestInfoP
 	return nil
 }
 
-//*
+// *
 // void response
 type TransitionToActiveResponseProto struct {
 	state         protoimpl.MessageState
@@ -380,7 +380,7 @@ func (*TransitionToActiveResponseProto) Descriptor() ([]byte, []int) {
 	return file_HAServiceProtocol_proto_rawDescGZIP(), []int{4}
 }
 
-//*
+// *
 // void request
 type TransitionToStandbyRequestProto struct {
 	state         protoimpl.MessageState
@@ -429,7 +429,7 @@ func (x *TransitionToStandbyRequestProto) GetReqInfo() *HAStateChangeRequestInfo
 	return nil
 }
 
-//*
+// *
 // void response
 type TransitionToStandbyResponseProto struct {
 	state         protoimpl.MessageState
@@ -469,7 +469,7 @@ func (*TransitionToStandbyResponseProto) Descriptor() ([]byte, []int) {
 	return file_HAServiceProtocol_proto_rawDescGZIP(), []int{6}
 }
 
-//*
+// *
 // void request
 type TransitionToObserverRequestProto struct {
 	state         protoimpl.MessageState
@@ -518,7 +518,7 @@ func (x *TransitionToObserverRequestProto) GetReqInfo() *HAStateChangeRequestInf
 	return nil
 }
 
-//*
+// *
 // void response
 type TransitionToObserverResponseProto struct {
 	state         protoimpl.MessageState
@@ -558,7 +558,7 @@ func (*TransitionToObserverResponseProto) Descriptor() ([]byte, []int) {
 	return file_HAServiceProtocol_proto_rawDescGZIP(), []int{8}
 }
 
-//*
+// *
 // void request
 type GetServiceStatusRequestProto struct {
 	state         protoimpl.MessageState
@@ -598,7 +598,7 @@ func (*GetServiceStatusRequestProto) Descriptor() ([]byte, []int) {
 	return file_HAServiceProtocol_proto_rawDescGZIP(), []int{9}
 }
 
-//*
+// *
 // Returns the state of the service
 type GetServiceStatusResponseProto struct {
 	state         protoimpl.MessageState
