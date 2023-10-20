@@ -1,0 +1,40 @@
+installation:
+  namespace: koordinator-system
+
+imageRepositoryHost: registry.cn-beijing.aliyuncs.com
+
+koordYarnOperator:
+  log:
+    # log level for koord-manager
+    level: "4"
+
+  replicas: 2
+  image:
+    repository: koordinator-sh/yarn-operator
+    #tag: "v0.1.0"
+    tag: "add-code-cov-6eea79c"
+  metrics:
+    port: 8080
+
+  resyncPeriod: "0"
+
+  # resources of koord-manager container
+  resources:
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+    requests:
+      cpu: 500m
+      memory: 256Mi
+
+  hostNetwork: false
+
+  nodeAffinity: {}
+  nodeSelector: {}
+  tolerations: []
+
+yarnConfiguration:
+  resourceManager:
+    address: "resource-manager.hadoop-yarn"
+    port: 8032
+    adminPort: 8033
