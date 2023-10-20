@@ -13,7 +13,7 @@
 
 3. You can run included hadoop tests like this:
    kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} yarn-rm -- /opt/hadoop/bin/hadoop jar /opt/hadoop/share/hadoop/mapreduce/hadoop-mapreduce-client-jobclient-{{ .Values.hadoopVersion }}-tests.jar TestDFSIO -write -nrFiles 5 -fileSize 128MB -resFile /tmp/TestDFSIOwrite.txt
-   kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} yarn-rm -- /opt/spark/bin/spark-submit --master yarn --deploy-mode cluster --class org.apache.spark.examples.SparkPi /opt/spark/examples/jars/spark-examples_2.12-3.0.0.jar 1000
+   kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} yarn-rm -- /opt/spark/bin/spark-submit --master yarn --deploy-mode cluster --class org.apache.spark.examples.SparkPi /opt/spark/examples/jars/spark-examples_2.12-3.3.3.jar 1000
 
 4. You can list the mapreduce jobs like this:
    kubectl exec -n {{ .Values.installation.namespace }} -it ${yarn-rm-pod-name} -- /opt/hadoop/bin/mapred job -list
