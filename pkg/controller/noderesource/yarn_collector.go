@@ -45,22 +45,22 @@ var (
 		nil)
 )
 
-type Yarn struct {
-	cache *cache.Nodes
+type YarnMetricCollector struct {
+	cache *cache.NodesSyncer
 }
 
-func NewYarn(cache *cache.Nodes) *Yarn {
-	return &Yarn{cache: cache}
+func NewYarnMetricCollector(cache *cache.NodesSyncer) *YarnMetricCollector {
+	return &YarnMetricCollector{cache: cache}
 }
 
-func (y *Yarn) Describe(descs chan<- *prometheus.Desc) {
+func (y *YarnMetricCollector) Describe(descs chan<- *prometheus.Desc) {
 	descs <- yarnNodeCPUMetric
 	descs <- yarnNodeMemoryMetric
 	descs <- yarnNodeCPUAllocatedMetric
 	descs <- yarnNodeMemoryAllocatedMetric
 }
 
-func (y *Yarn) Collect(metrics chan<- prometheus.Metric) {
+func (y *YarnMetricCollector) Collect(metrics chan<- prometheus.Metric) {
 	for clusterID, nodes := range y.cache.GetYarnNodeInfo() {
 		for _, node := range nodes {
 			metrics <- prometheus.MustNewConstMetric(
