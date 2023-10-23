@@ -14,10 +14,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+// NOTE: functions in this file can be overwritten for extension
+
 package noderesource
 
 import (
 	"github.com/koordinator-sh/koordinator/apis/extension"
+	"k8s.io/apimachinery/pkg/api/resource"
 )
 
 const (
@@ -26,8 +29,9 @@ const (
 
 	YarnClusterIDAnnotation = "yarn.hadoop.apache.org/cluster-id"
 
+	// TODO mv to koordinator/api
 	yarnNodeAllocatedResourceAnnotationKey = "node.yarn.koordinator.sh/resourceAllocated"
-	actualOfflineResourceAnnotationKey     = "node.yarn.koordinator.sh/actualOfflineResource"
+	nodeOriginAllocatableAnnotationKey     = "node.koordinator.sh/originAllocatable"
 )
 
 const (
@@ -36,3 +40,8 @@ const (
 	yarnNodeCPUAllocatedResource    = "yarn_node_cpu_allocated_resource"
 	yarnNodeMemoryAllocatedResource = "yarn_node_memory_allocated_resource"
 )
+
+func calculate(batchCPU resource.Quantity, batchMemory resource.Quantity) (int64, int64) {
+	// TODO multiple ratio as buffer
+	return batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega)
+}

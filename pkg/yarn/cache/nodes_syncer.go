@@ -27,22 +27,26 @@ import (
 	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
 )
 
-type Nodes struct {
+const (
+	syncInterval = time.Second
+)
+
+type NodesSyncer struct {
 	yarnClients map[string]*yarnclient.YarnClient
 
 	cache map[string]map[string]*hadoopyarn.NodeReportProto
 	mtx   sync.RWMutex
 }
 
-func NewNodes(yarnClients map[string]*yarnclient.YarnClient) *Nodes {
-	return &Nodes{
+func NewNodesSyncer(yarnClients map[string]*yarnclient.YarnClient) *NodesSyncer {
+	return &NodesSyncer{
 		yarnClients: yarnClients,
 		cache:       map[string]map[string]*hadoopyarn.NodeReportProto{},
 		mtx:         sync.RWMutex{},
 	}
 }
 
-func (r *Nodes) GetNodeResource(yarnNode *YarnNode) (*hadoopyarn.NodeReportProto, bool) {
+func (r *NodesSyncer) GetNodeResource(yarnNode *YarnNode) (*hadoopyarn.NodeReportProto, bool) {
 	if yarnNode == nil {
 		return nil, false
 	}
@@ -57,13 +61,13 @@ func (r *Nodes) GetNodeResource(yarnNode *YarnNode) (*hadoopyarn.NodeReportProto
 	return data, exist
 }
 
-func (r *Nodes) getKey(yarnNodeName string, yarnNodePort int32) string {
+func (r *NodesSyncer) getKey(yarnNodeName string, yarnNodePort int32) string {
 	return fmt.Sprintf("%s-%d", yarnNodeName, yarnNodePort)
 }
 
-func (r *Nodes) Sync() {
-	t := time.NewTicker(time.Second)
-	debug := time.NewTicker(time.Second * 10)
+func (r *NodesSyncer) Sync() {
+	t := time.NewTicker(syncInterval)
+	debug := time.NewTicker(syncInterval * 10)
 	for {
 		select {
 		case <-t.C:
@@ -76,7 +80,7 @@ func (r *Nodes) Sync() {
 	}
 }
 
-func (r *Nodes) debug() {
+func (r *NodesSyncer) debug() {
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
 	for clusterID, clusterCache := range r.cache {
@@ -89,7 +93,7 @@ func (r *Nodes) debug() {
 
 // GetYarnNodeInfo get yarn node info from cache, read only result
 // Warning: Do not edit any field of results
-func (r *Nodes) GetYarnNodeInfo() map[string][]*hadoopyarn.NodeReportProto {
+func (r *NodesSyncer) GetYarnNodeInfo() map[string][]*hadoopyarn.NodeReportProto {
 	r.mtx.RLock()
 	defer r.mtx.RUnlock()
 	res := map[string][]*hadoopyarn.NodeReportProto{}
@@ -103,7 +107,7 @@ func (r *Nodes) GetYarnNodeInfo() map[string][]*hadoopyarn.NodeReportProto {
 	return res
 }
 
-func (r *Nodes) syncYARNNodeAllocatedResource() error {
+func (r *NodesSyncer) syncYARNNodeAllocatedResource() error {
 	req := hadoopyarn.GetClusterNodesRequestProto{NodeStates: []hadoopyarn.NodeStateProto{hadoopyarn.NodeStateProto_NS_RUNNING}}
 	res := map[string]map[string]*hadoopyarn.NodeReportProto{}
 	for id, yarnClient := range r.yarnClients {

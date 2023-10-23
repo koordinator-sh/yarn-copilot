@@ -19,7 +19,6 @@ package noderesource
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 
@@ -43,15 +42,14 @@ import (
 )
 
 const (
-	Name          = "yarnresource"
-	YarnNamespace = "yarn"
+	Name = "yarnresource"
 )
 
 type YARNResourceSyncReconciler struct {
 	client.Client
-	yarnClient  *yarnclient.YarnClient
-	yarnClients map[string]*yarnclient.YarnClient
-	cache       *cache.Nodes
+	yarnClient    *yarnclient.YarnClient
+	yarnClients   map[string]*yarnclient.YarnClient
+	yarnNodeCache *cache.NodesSyncer
 }
 
 func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcile.Request) (reconcile.Result, error) {
@@ -72,18 +70,22 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 		return ctrl.Result{}, nil
 	}
 	if yarnNode == nil || yarnNode.Name == "" || yarnNode.Port == 0 {
-		klog.V(3).Infof("skip for yarn node not exist on node %v, detail %+v", req.Name, yarnNode)
-		return ctrl.Result{}, r.updateYarnAllocatedResource(node, 0, 0)
+		klog.V(3).Infof("yarn node not exist on node %v, clear yarn allocated resource, detail %+v", req.Name, yarnNode)
+		if err := r.updateYarnAllocatedResource(node, 0, 0); err != nil {
+			klog.Warningf("failed to clear yarn allocated resource for node %v", req.Name)
+			return ctrl.Result{Requeue: true}, err
+		}
+		return ctrl.Result{}, nil
 	}
 
 	// TODO exclude batch pod requested
-	batchCPU, batchMemory, err := r.GetNodeOfflineResource(node, yarnNode)
+	batchCPU, batchMemory, err := r.GetNodeBatchResource(node)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-	klog.V(4).Infof("get node offline resource cpu: %d, memory: %d, name: %s", batchCPU.Value(), batchMemory.Value(), node.Name)
+	klog.V(4).Infof("get node batch resource cpu: %d, memory: %d, name: %s", batchCPU.Value(), batchMemory.Value(), node.Name)
 
-	vcores, memoryMB := resourceReserved(batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega))
+	vcores, memoryMB := calculate(batchCPU, batchMemory)
 
 	// TODO control update frequency
 	if err := r.updateYARNNodeResource(yarnNode, vcores, memoryMB); err != nil {
@@ -103,7 +105,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	return ctrl.Result{}, nil
 }
 
-func (r *YARNResourceSyncReconciler) GetNodeOfflineResource(node *corev1.Node, yarnNode *cache.YarnNode) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
+func (r *YARNResourceSyncReconciler) GetNodeBatchResource(node *corev1.Node) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
 	batchCPU, cpuExist := node.Status.Allocatable[BatchCPU]
 	batchMemory, memExist := node.Status.Allocatable[BatchMemory]
 	if !cpuExist {
@@ -112,22 +114,18 @@ func (r *YARNResourceSyncReconciler) GetNodeOfflineResource(node *corev1.Node, y
 	if !memExist {
 		batchMemory = *resource.NewQuantity(0, resource.BinarySI)
 	}
-	if node.Annotations == nil || len(node.Annotations[actualOfflineResourceAnnotationKey]) == 0 {
+	if node.Annotations == nil || len(node.Annotations[nodeOriginAllocatableAnnotationKey]) == 0 {
+		// koordiantor <= 1.3.0, use node status as origin batch total
 		return
 	}
-	//cpu, mem, err := r.getYARNNodeAllocatedResource(yarnNode)
-	//if err != nil {
-	//	return
-	//}
-	//batchCPU.Add(*resource.NewQuantity(int64(cpu*1000), resource.DecimalSI))
-	//batchMemory.Add(*resource.NewQuantity(int64(mem*1024*1024), resource.BinarySI))
-	var actualResource corev1.ResourceList
-	err = json.Unmarshal([]byte(node.Annotations[actualOfflineResourceAnnotationKey]), &actualResource)
+
+	var originAllocatable corev1.ResourceList
+	err = json.Unmarshal([]byte(node.Annotations[nodeOriginAllocatableAnnotationKey]), &originAllocatable)
 	if err != nil {
 		return
 	}
-	batchCPU, cpuExist = actualResource[BatchCPU]
-	batchMemory, memExist = actualResource[BatchMemory]
+	batchCPU, cpuExist = originAllocatable[BatchCPU]
+	batchMemory, memExist = originAllocatable[BatchMemory]
 	if !cpuExist {
 		batchCPU = *resource.NewQuantity(0, resource.DecimalSI)
 	}
@@ -188,21 +186,20 @@ func (r *YARNResourceSyncReconciler) GetAllocatedResource(node *corev1.Node) (Al
 }
 
 func Add(mgr ctrl.Manager) error {
-
 	clients, err := yarnclient.GetAllKnownClients()
 	if err != nil {
 		return err
 	}
-	nodeCache := cache.NewNodes(clients)
-	go nodeCache.Sync()
-	coll := NewYarn(nodeCache)
-	if _ = metrics.Registry.Register(coll); err != nil {
+	yarnNodesSyncer := cache.NewNodesSyncer(clients)
+	go yarnNodesSyncer.Sync()
+	coll := NewYarnMetricCollector(yarnNodesSyncer)
+	if err = metrics.Registry.Register(coll); err != nil {
 		return err
 	}
 	r := &YARNResourceSyncReconciler{
-		Client:      mgr.GetClient(),
-		yarnClients: clients,
-		cache:       nodeCache,
+		Client:        mgr.GetClient(),
+		yarnClients:   clients,
+		yarnNodeCache: yarnNodesSyncer,
 	}
 	return r.SetupWithManager(mgr)
 }
@@ -231,22 +228,6 @@ func (r *YARNResourceSyncReconciler) getYARNNodeManagerPod(node *corev1.Node) (*
 		return &podList.Items[0], nil
 	}
 	return &podList.Items[0], nil
-}
-
-// CPU暂时不考虑预留，内存预留5% 给nodemanager，且保证汇报资源量不大于100GB【业务方需求，调度任务过多云盘IO压力过大】
-func resourceReserved(vcore, memoryMB int64) (int32, int64) {
-	klog.V(3).Infof("before reserved %d %d", vcore, memoryMB)
-	// convert to yarn format.
-	memMB := int64(math.Floor(float64(memoryMB) * float64(0.95)))
-	memMBMax := int64(160 * 1024) // 大于160GB，默认只上报160GB
-	memMBMin := int64(10 * 1024)  // 小于10GB，默认不上报，禁止离线调度上来
-	if memMB >= memMBMax {
-		memMB = memMBMax
-	}
-	if memMB < memMBMin {
-		memMB = int64(0)
-	}
-	return int32(vcore), memMB
 }
 
 func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*cache.YarnNode, error) {
@@ -284,8 +265,7 @@ func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*cache.Yarn
 	return yarnNode, nil
 }
 
-func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.YarnNode, vcores int32, memoryMB int64) error {
-
+func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.YarnNode, vcores, memoryMB int64) error {
 	request := &yarnserver.UpdateNodeResourceRequestProto{
 		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
 			{
@@ -296,7 +276,7 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.Yarn
 				ResourceOption: &hadoopyarn.ResourceOptionProto{
 					Resource: &hadoopyarn.ResourceProto{
 						Memory:       &memoryMB,
-						VirtualCores: &vcores,
+						VirtualCores: pointer.Int32(int32(vcores)),
 					},
 				},
 			},
@@ -339,7 +319,7 @@ func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *cache.YarnNode) (*y
 }
 
 func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *cache.YarnNode) (vcores int32, memoryMB int64, err error) {
-	nodeResource, exist := r.cache.GetNodeResource(yarnNode)
+	nodeResource, exist := r.yarnNodeCache.GetNodeResource(yarnNode)
 	if !exist {
 		return 0, 0, nil
 	}
