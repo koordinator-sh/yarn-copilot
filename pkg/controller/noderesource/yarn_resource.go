@@ -34,13 +34,6 @@ const (
 	nodeOriginAllocatableAnnotationKey     = "node.koordinator.sh/originAllocatable"
 )
 
-const (
-	yarnNodeCPUResource             = "yarn_node_cpu_resource"
-	yarnNodeMemoryResource          = "yarn_node_memory_resource"
-	yarnNodeCPUAllocatedResource    = "yarn_node_cpu_allocated_resource"
-	yarnNodeMemoryAllocatedResource = "yarn_node_memory_allocated_resource"
-)
-
 func calculate(batchCPU resource.Quantity, batchMemory resource.Quantity) (int64, int64) {
 	// TODO multiple ratio as buffer
 	return batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega)

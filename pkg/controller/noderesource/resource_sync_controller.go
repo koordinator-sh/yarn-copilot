@@ -35,6 +35,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	yarnmetrics "github.com/koordinator-sh/goyarn/pkg/controller/metrics"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
 	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
 	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
@@ -192,7 +193,7 @@ func Add(mgr ctrl.Manager) error {
 	}
 	yarnNodesSyncer := cache.NewNodesSyncer(clients)
 	go yarnNodesSyncer.Sync()
-	coll := NewYarnMetricCollector(yarnNodesSyncer)
+	coll := yarnmetrics.NewYarnMetricCollector(yarnNodesSyncer)
 	if err = metrics.Registry.Register(coll); err != nil {
 		return err
 	}
