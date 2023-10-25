@@ -26,8 +26,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 
 	"github.com/koordinator-sh/goyarn/cmd/yarn-copilot/options"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/nm"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/copilot/server"
+	"github.com/koordinator-sh/goyarn/pkg/copilot/nm"
+	"github.com/koordinator-sh/goyarn/pkg/copilot/server"
 )
 
 func main() {
