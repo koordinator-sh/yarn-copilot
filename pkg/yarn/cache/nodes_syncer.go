@@ -29,6 +29,8 @@ import (
 
 const (
 	syncInterval = time.Second
+
+	timeoutInterval = time.Minute
 )
 
 type NodesSyncer struct {
@@ -36,13 +38,18 @@ type NodesSyncer struct {
 
 	cache map[string]map[string]*hadoopyarn.NodeReportProto
 	mtx   sync.RWMutex
+
+	updatedTime     time.Time
+	timeoutInterval time.Duration
 }
 
 func NewNodesSyncer(yarnClients map[string]*yarnclient.YarnClient) *NodesSyncer {
 	return &NodesSyncer{
-		yarnClients: yarnClients,
-		cache:       map[string]map[string]*hadoopyarn.NodeReportProto{},
-		mtx:         sync.RWMutex{},
+		yarnClients:     yarnClients,
+		cache:           map[string]map[string]*hadoopyarn.NodeReportProto{},
+		mtx:             sync.RWMutex{},
+		updatedTime:     time.Now(),
+		timeoutInterval: timeoutInterval,
 	}
 }
 
@@ -108,6 +115,10 @@ func (r *NodesSyncer) GetYarnNodeInfo() map[string][]*hadoopyarn.NodeReportProto
 }
 
 func (r *NodesSyncer) syncYARNNodeAllocatedResource() error {
+	if time.Now().After(r.updatedTime.Add(r.timeoutInterval)) {
+		klog.Fatal("cache is timeout")
+		return nil
+	}
 	req := hadoopyarn.GetClusterNodesRequestProto{NodeStates: []hadoopyarn.NodeStateProto{hadoopyarn.NodeStateProto_NS_RUNNING}}
 	res := map[string]map[string]*hadoopyarn.NodeReportProto{}
 	for id, yarnClient := range r.yarnClients {
@@ -129,5 +140,6 @@ func (r *NodesSyncer) syncYARNNodeAllocatedResource() error {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 	r.cache = res
+	r.updatedTime = time.Now()
 	return nil
 }
