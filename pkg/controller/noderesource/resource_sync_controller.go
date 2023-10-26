@@ -72,7 +72,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	}
 	if yarnNode == nil || yarnNode.Name == "" || yarnNode.Port == 0 {
 		klog.V(3).Infof("yarn node not exist on node %v, clear yarn allocated resource, detail %+v", req.Name, yarnNode)
-		if err := r.updateYarnAllocatedResource(node, 0, 0); err != nil {
+		if err := r.updateYARNAllocatedResource(node, 0, 0); err != nil {
 			klog.Warningf("failed to clear yarn allocated resource for node %v", req.Name)
 			return ctrl.Result{Requeue: true}, err
 		}
@@ -80,7 +80,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	}
 
 	// TODO exclude batch pod requested
-	batchCPU, batchMemory, err := r.GetNodeBatchResource(node)
+	batchCPU, batchMemory, err := getNodeBatchResource(node)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -100,13 +100,17 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	if err != nil {
 		return reconcile.Result{}, err
 	}
-	if err := r.updateYarnAllocatedResource(node, core, mb); err != nil {
+	if err := r.updateYARNAllocatedResource(node, core, mb); err != nil {
 		return reconcile.Result{}, err
 	}
 	return ctrl.Result{}, nil
 }
 
-func (r *YARNResourceSyncReconciler) GetNodeBatchResource(node *corev1.Node) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
+func getNodeBatchResource(node *corev1.Node) (batchCPU resource.Quantity, batchMemory resource.Quantity, err error) {
+	if node == nil {
+		return
+	}
+
 	batchCPU, cpuExist := node.Status.Allocatable[BatchCPU]
 	batchMemory, memExist := node.Status.Allocatable[BatchMemory]
 	if !cpuExist {
@@ -115,18 +119,18 @@ func (r *YARNResourceSyncReconciler) GetNodeBatchResource(node *corev1.Node) (ba
 	if !memExist {
 		batchMemory = *resource.NewQuantity(0, resource.BinarySI)
 	}
-	if node.Annotations == nil || len(node.Annotations[nodeOriginAllocatableAnnotationKey]) == 0 {
+	if node.Annotations == nil || len(node.Annotations[NodeOriginAllocatableAnnotationKey]) == 0 {
 		// koordiantor <= 1.3.0, use node status as origin batch total
 		return
 	}
 
-	var originAllocatable corev1.ResourceList
-	err = json.Unmarshal([]byte(node.Annotations[nodeOriginAllocatableAnnotationKey]), &originAllocatable)
+	originAllocatable, err := GetOriginExtendAllocatable(node.Annotations)
 	if err != nil {
+		klog.Warningf("get origin allocatable from node %v annotation failed, error: %v", node.Name, err)
 		return
 	}
-	batchCPU, cpuExist = originAllocatable[BatchCPU]
-	batchMemory, memExist = originAllocatable[BatchMemory]
+	batchCPU, cpuExist = originAllocatable.Resources[BatchCPU]
+	batchMemory, memExist = originAllocatable.Resources[BatchMemory]
 	if !cpuExist {
 		batchCPU = *resource.NewQuantity(0, resource.DecimalSI)
 	}
@@ -136,31 +140,23 @@ func (r *YARNResourceSyncReconciler) GetNodeBatchResource(node *corev1.Node) (ba
 	return
 }
 
-type ResourceInfo map[string]resource.Quantity
-
-type AllocatedResource map[string]*ResourceInfo
-
-func (r *YARNResourceSyncReconciler) updateYarnAllocatedResource(node *corev1.Node, vcores int32, memoryMB int64) error {
-	allocatedResource, err := r.GetAllocatedResource(node)
-	if err != nil {
-		return err
+func (r *YARNResourceSyncReconciler) updateYARNAllocatedResource(node *corev1.Node, vcores int32, memoryMB int64) error {
+	if node == nil {
+		return nil
 	}
-	cpu := *resource.NewQuantity(int64(vcores), resource.DecimalSI)
-	memory := *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI)
-	allocatedResource["yarnAllocated"] = &ResourceInfo{
-		string(BatchCPU):    cpu,
-		string(BatchMemory): memory,
+	nodeAllocated := &NodeAllocated{
+		YARNAllocated: map[corev1.ResourceName]resource.Quantity{
+			BatchCPU:    *resource.NewQuantity(int64(vcores), resource.DecimalSI),
+			BatchMemory: *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
+		},
 	}
-	return r.SetAllocatedResource(node, allocatedResource)
-}
 
-func (r *YARNResourceSyncReconciler) SetAllocatedResource(node *corev1.Node, resource AllocatedResource) error {
-	marshal, err := json.Marshal(resource)
+	nodeAllocatedStr, err := json.Marshal(nodeAllocated)
 	if err != nil {
 		return err
 	}
 	newNode := node.DeepCopy()
-	newNode.Annotations[yarnNodeAllocatedResourceAnnotationKey] = string(marshal)
+	newNode.Annotations[NodeAllocatedResourceAnnotationKey] = string(nodeAllocatedStr)
 	oldData, err := json.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal the existing node %#v: %v", node, err)
@@ -176,14 +172,6 @@ func (r *YARNResourceSyncReconciler) SetAllocatedResource(node *corev1.Node, res
 	}
 	klog.Infof("update node %s", node.Name)
 	return r.Client.Patch(context.TODO(), newNode, client.RawPatch(types.StrategicMergePatchType, patchBytes))
-}
-
-func (r *YARNResourceSyncReconciler) GetAllocatedResource(node *corev1.Node) (AllocatedResource, error) {
-	if node.GetAnnotations() == nil || node.GetAnnotations()[yarnNodeAllocatedResourceAnnotationKey] == "" {
-		return map[string]*ResourceInfo{}, nil
-	}
-	var res map[string]*ResourceInfo
-	return res, json.Unmarshal([]byte(node.GetAnnotations()[yarnNodeAllocatedResourceAnnotationKey]), &res)
 }
 
 func Add(mgr ctrl.Manager) error {
@@ -213,6 +201,9 @@ func (r *YARNResourceSyncReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *YARNResourceSyncReconciler) getYARNNodeManagerPod(node *corev1.Node) (*corev1.Pod, error) {
+	if node == nil {
+		return nil, nil
+	}
 	opts := []client.ListOption{
 		client.MatchingLabels{YarnNMComponentLabel: YarnNMComponentValue},
 		client.MatchingFields{"spec.nodeName": node.Name},
@@ -225,8 +216,8 @@ func (r *YARNResourceSyncReconciler) getYARNNodeManagerPod(node *corev1.Node) (*
 		return nil, nil
 	}
 	if len(podList.Items) > 1 {
-		klog.Warningf("get %v node manager pod on node %v, will select the first one", len(podList.Items), node.Name)
-		return &podList.Items[0], nil
+		klog.Warningf("get %v node manager pod on node %v, will select the first one %v/%v", len(podList.Items),
+			node.Name, podList.Items[0].Namespace, podList.Items[0].Name)
 	}
 	return &podList.Items[0], nil
 }
