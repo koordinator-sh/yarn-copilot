@@ -22,13 +22,6 @@ import (
 	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
 )
 
-const (
-	yarnNodeCPUResource             = "yarn_node_cpu_resource"
-	yarnNodeMemoryResource          = "yarn_node_memory_resource"
-	yarnNodeCPUAllocatedResource    = "yarn_node_cpu_allocated_resource"
-	yarnNodeMemoryAllocatedResource = "yarn_node_memory_allocated_resource"
-)
-
 var (
 	yarnNodeCPUMetric = prometheus.NewDesc(
 		yarnNodeCPUResource,

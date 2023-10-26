@@ -19,8 +19,12 @@ limitations under the License.
 package noderesource
 
 import (
-	"github.com/koordinator-sh/koordinator/apis/extension"
+	"encoding/json"
+
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
+
+	"github.com/koordinator-sh/koordinator/apis/extension"
 )
 
 const (
@@ -30,11 +34,44 @@ const (
 	YarnClusterIDAnnotation = "yarn.hadoop.apache.org/cluster-id"
 
 	// TODO mv to koordinator/api
-	yarnNodeAllocatedResourceAnnotationKey = "node.yarn.koordinator.sh/resourceAllocated"
-	nodeOriginAllocatableAnnotationKey     = "node.koordinator.sh/originAllocatable"
+	NodeOriginAllocatableAnnotationKey = "node.koordinator.sh/originAllocatable"
+	NodeAllocatedResourceAnnotationKey = "node.koordinator.sh/resourceAllocated"
 )
 
 func calculate(batchCPU resource.Quantity, batchMemory resource.Quantity) (int64, int64) {
 	// TODO multiple ratio as buffer
 	return batchCPU.ScaledValue(resource.Kilo), batchMemory.ScaledValue(resource.Mega)
+}
+
+// TODO mv to koordiantor api
+type OriginAllocatable struct {
+	Resources corev1.ResourceList `json:"resources,omitempty"`
+}
+
+func GetOriginExtendAllocatable(annotations map[string]string) (*OriginAllocatable, error) {
+	originAllocatableStr, exist := annotations[NodeOriginAllocatableAnnotationKey]
+	if !exist {
+		return nil, nil
+	}
+	originAllocatable := &OriginAllocatable{}
+	if err := json.Unmarshal([]byte(originAllocatableStr), originAllocatable); err != nil {
+		return nil, err
+	}
+	return originAllocatable, nil
+}
+
+type NodeAllocated struct {
+	YARNAllocated corev1.ResourceList `json:"yarnAllocated,omitempty"`
+}
+
+func GetNodeAllocated(annotations map[string]string) (*NodeAllocated, error) {
+	nodeAllocatedStr, exist := annotations[NodeAllocatedResourceAnnotationKey]
+	if !exist {
+		return nil, nil
+	}
+	nodeAllocated := &NodeAllocated{}
+	if err := json.Unmarshal([]byte(nodeAllocatedStr), nodeAllocated); err != nil {
+		return nil, err
+	}
+	return nodeAllocated, nil
 }
