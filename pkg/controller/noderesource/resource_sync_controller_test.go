@@ -18,7 +18,8 @@ package noderesource
 
 import (
 	"context"
-	"encoding/json"
+	"fmt"
+	"github.com/golang/mock/gomock"
 	"reflect"
 	"testing"
 
@@ -32,6 +33,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
+	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	"github.com/koordinator-sh/goyarn/pkg/yarn/client/mockclient"
 )
 
 func TestYARNResourceSyncReconciler_getYARNNode(t *testing.T) {
@@ -60,8 +63,8 @@ func TestYARNResourceSyncReconciler_getYARNNode(t *testing.T) {
 							YarnNMComponentLabel: YarnNMComponentValue,
 						},
 						Annotations: map[string]string{
-							YarnNodeIdAnnotation:    "test-nm-id:8041",
-							YarnClusterIDAnnotation: "test-cluster-id",
+							YarnNodeIdAnnotation:          "test-nm-id:8041",
+							PodYarnClusterIDAnnotationKey: "test-cluster-id",
 						},
 					},
 					Spec: corev1.PodSpec{
@@ -109,7 +112,7 @@ func TestYARNResourceSyncReconciler_getYARNNode(t *testing.T) {
 func Test_getNodeBatchResource(t *testing.T) {
 	type args struct {
 		node              *corev1.Node
-		originAllocatable *OriginAllocatable
+		originAllocatable corev1.ResourceList
 	}
 	tests := []struct {
 		name            string
@@ -144,11 +147,9 @@ func Test_getNodeBatchResource(t *testing.T) {
 					},
 					Status: corev1.NodeStatus{},
 				},
-				originAllocatable: &OriginAllocatable{
-					map[corev1.ResourceName]resource.Quantity{
-						BatchCPU:    *resource.NewQuantity(1000, resource.DecimalSI),
-						BatchMemory: *resource.NewQuantity(1024, resource.BinarySI),
-					},
+				originAllocatable: corev1.ResourceList{
+					BatchCPU:    *resource.NewQuantity(1000, resource.DecimalSI),
+					BatchMemory: *resource.NewQuantity(1024, resource.BinarySI),
 				},
 			},
 			wantBatchCPU:    *resource.NewQuantity(1000, resource.DecimalSI),
@@ -169,11 +170,9 @@ func Test_getNodeBatchResource(t *testing.T) {
 						},
 					},
 				},
-				originAllocatable: &OriginAllocatable{
-					map[corev1.ResourceName]resource.Quantity{
-						BatchCPU:    *resource.NewQuantity(1000, resource.DecimalSI),
-						BatchMemory: *resource.NewQuantity(1024, resource.BinarySI),
-					},
+				originAllocatable: corev1.ResourceList{
+					BatchCPU:    *resource.NewQuantity(1000, resource.DecimalSI),
+					BatchMemory: *resource.NewQuantity(1024, resource.BinarySI),
 				},
 			},
 			wantBatchCPU:    *resource.NewQuantity(1000, resource.DecimalSI),
@@ -191,9 +190,8 @@ func Test_getNodeBatchResource(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if tt.args.originAllocatable != nil && tt.args.node != nil && tt.args.node.Annotations != nil {
-				originAllocatableStr, err := json.Marshal(tt.args.originAllocatable)
+				err := SetOriginExtendedAllocatableRes(tt.args.node.Annotations, tt.args.originAllocatable)
 				assert.NoError(t, err)
-				tt.args.node.Annotations[NodeOriginAllocatableAnnotationKey] = string(originAllocatableStr)
 			}
 			gotBatchCPU, gotBatchMemory, err := getNodeBatchResource(tt.args.node)
 			assert.Equal(t, tt.wantErr, err != nil)
@@ -212,7 +210,7 @@ func TestYARNResourceSyncReconciler_updateYARNAllocatedResource(t *testing.T) {
 	tests := []struct {
 		name          string
 		args          args
-		wantAllocated *NodeAllocated
+		wantAllocated corev1.ResourceList
 		wantErr       bool
 	}{
 		{
@@ -233,11 +231,9 @@ func TestYARNResourceSyncReconciler_updateYARNAllocatedResource(t *testing.T) {
 				vcores:   1,
 				memoryMB: 1024,
 			},
-			wantAllocated: &NodeAllocated{
-				YARNAllocated: map[corev1.ResourceName]resource.Quantity{
-					BatchCPU:    resource.MustParse("1"),
-					BatchMemory: resource.MustParse("1Gi"),
-				},
+			wantAllocated: corev1.ResourceList{
+				BatchCPU:    resource.MustParse("1k"),
+				BatchMemory: resource.MustParse("1Gi"),
 			},
 			wantErr: false,
 		},
@@ -259,7 +255,7 @@ func TestYARNResourceSyncReconciler_updateYARNAllocatedResource(t *testing.T) {
 				gotNode := &corev1.Node{}
 				key := types.NamespacedName{Name: tt.args.node.Name}
 				assert.NoError(t, r.Client.Get(context.TODO(), key, gotNode))
-				nodeAllocated, gotErr := GetNodeAllocated(gotNode.Annotations)
+				nodeAllocated, gotErr := GetYARNAllocatedResource(gotNode.Annotations)
 				assert.Equal(t, tt.wantAllocated, nodeAllocated)
 				assert.NoError(t, gotErr)
 			}
@@ -404,8 +400,8 @@ func TestYARNResourceSyncReconciler_getYARNNode1(t *testing.T) {
 								YarnNMComponentLabel: YarnNMComponentValue,
 							},
 							Annotations: map[string]string{
-								YarnNodeIdAnnotation:    "test-yarn-node-id:8042",
-								YarnClusterIDAnnotation: "test-yarn-cluster-id",
+								YarnNodeIdAnnotation:          "test-yarn-node-id:8042",
+								PodYarnClusterIDAnnotationKey: "test-yarn-cluster-id",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -462,8 +458,8 @@ func TestYARNResourceSyncReconciler_getYARNNode1(t *testing.T) {
 								YarnNMComponentLabel: YarnNMComponentValue,
 							},
 							Annotations: map[string]string{
-								YarnNodeIdAnnotation:    "test-yarn-node-id-8042",
-								YarnClusterIDAnnotation: "test-yarn-cluster-id",
+								YarnNodeIdAnnotation:          "test-yarn-node-id-8042",
+								PodYarnClusterIDAnnotationKey: "test-yarn-cluster-id",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -491,8 +487,8 @@ func TestYARNResourceSyncReconciler_getYARNNode1(t *testing.T) {
 								YarnNMComponentLabel: YarnNMComponentValue,
 							},
 							Annotations: map[string]string{
-								YarnNodeIdAnnotation:    "test-yarn-node-id:bad-port",
-								YarnClusterIDAnnotation: "test-yarn-cluster-id",
+								YarnNodeIdAnnotation:          "test-yarn-node-id:bad-port",
+								PodYarnClusterIDAnnotationKey: "test-yarn-cluster-id",
 							},
 						},
 						Spec: corev1.PodSpec{
@@ -522,6 +518,315 @@ func TestYARNResourceSyncReconciler_getYARNNode1(t *testing.T) {
 			got, err := r.getYARNNode(tt.args.node)
 			assert.Equal(t, tt.wantErr, err != nil)
 			assert.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestYARNResourceSyncReconciler_getYARNClient(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	yarnClient := mock_client.NewMockYarnClient(ctrl)
+	yarnCluster1Client := mock_client.NewMockYarnClient(ctrl)
+	yarnClients := map[string]yarnclient.YarnClient{
+		"test-cluster1": yarnCluster1Client,
+	}
+
+	type fields struct {
+		yarnClientOfReconciler  yarnclient.YarnClient
+		yarnClientsOfReconciler map[string]yarnclient.YarnClient
+		yarnClientFromFactory   yarnclient.YarnClient
+		yarnClientsFromFactory  map[string]yarnclient.YarnClient
+	}
+	type args struct {
+		yarnNode                  *cache.YarnNode
+		factoryCreateDefaultError error
+		factoryCreateClusterError map[string]error
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		want    yarnclient.YarnClient
+		wantErr bool
+	}{
+		{
+			name:   "return nil with nil node",
+			fields: fields{},
+			args: args{
+				yarnNode: nil,
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "get default client by empty cluster id",
+			fields: fields{
+				yarnClientOfReconciler: yarnClient,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-node",
+					Port:      8042,
+					ClusterID: "",
+				},
+			},
+			want:    yarnClient,
+			wantErr: false,
+		},
+		{
+			name: "get default client by empty cluster id from new",
+			fields: fields{
+				yarnClientFromFactory: yarnClient,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-node",
+					Port:      8042,
+					ClusterID: "",
+				},
+			},
+			want:    yarnClient,
+			wantErr: false,
+		},
+		{
+			name: "get default client by empty cluster id from new with error",
+			fields: fields{
+				yarnClientFromFactory: yarnClient,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-node",
+					Port:      8042,
+					ClusterID: "",
+				},
+				factoryCreateDefaultError: fmt.Errorf("create default error"),
+			},
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "get cluster client from reconciler",
+			fields: fields{
+				yarnClientsOfReconciler: yarnClients,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-node",
+					Port:      8042,
+					ClusterID: "test-cluster1",
+				},
+			},
+			want:    yarnCluster1Client,
+			wantErr: false,
+		},
+		{
+			name: "get cluster client from new",
+			fields: fields{
+				yarnClientsFromFactory: yarnClients,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-node",
+					Port:      8042,
+					ClusterID: "test-cluster1",
+				},
+			},
+			want:    yarnCluster1Client,
+			wantErr: false,
+		},
+		{
+			name: "get cluster client from new with error",
+			fields: fields{
+				yarnClientsFromFactory: yarnClients,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-node",
+					Port:      8042,
+					ClusterID: "test-cluster1",
+				},
+				factoryCreateClusterError: map[string]error{
+					"test-cluster1": fmt.Errorf("create default error"),
+				},
+			},
+			want:    nil,
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockYarnClientFactory := mock_client.NewMockYarnClientFactory(ctrl)
+			yarnclient.DefaultYarnClientFactory = mockYarnClientFactory
+
+			if tt.fields.yarnClientFromFactory != nil {
+				mockYarnClientFactory.EXPECT().CreateDefaultYarnClient().Return(tt.fields.yarnClientFromFactory, tt.args.factoryCreateDefaultError)
+			}
+			for clusterID, client := range tt.fields.yarnClientsFromFactory {
+				createError := tt.args.factoryCreateClusterError[clusterID]
+				mockYarnClientFactory.EXPECT().CreateYarnClientByClusterID(clusterID).Return(client, createError)
+			}
+			r := &YARNResourceSyncReconciler{
+				yarnClient:  tt.fields.yarnClientOfReconciler,
+				yarnClients: tt.fields.yarnClientsOfReconciler,
+			}
+			got, err := r.getYARNClient(tt.args.yarnNode)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getYARNClient() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("getYARNClient() got = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestYARNResourceSyncReconciler_updateYARNNodeResource(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	type fields struct {
+		yarnClientErrorFromFactory error
+		doUpdate                   bool
+		updateNodeResourceError    error
+		doReinit                   bool
+		reinitError                error
+	}
+	type args struct {
+		yarnNode *cache.YarnNode
+		vcores   int64
+		memoryMB int64
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		{
+			name: "nil node return nil",
+			fields: fields{
+				doUpdate: false,
+			},
+			args:    args{},
+			wantErr: false,
+		},
+		{
+			name: "get client failed",
+			fields: fields{
+				yarnClientErrorFromFactory: fmt.Errorf("create client error"),
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{},
+			},
+			wantErr: true,
+		},
+		{
+			name: "update succ",
+			fields: fields{
+				doUpdate: true,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{},
+			},
+			wantErr: false,
+		},
+		{
+			name: "update failed",
+			fields: fields{
+				doUpdate:                true,
+				updateNodeResourceError: fmt.Errorf("update error"),
+				doReinit:                true,
+			},
+			args: args{
+				yarnNode: &cache.YarnNode{},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockYarnClientFactory := mock_client.NewMockYarnClientFactory(ctrl)
+			yarnclient.DefaultYarnClientFactory = mockYarnClientFactory
+			yarnClient := mock_client.NewMockYarnClient(ctrl)
+			if tt.args.yarnNode != nil {
+				mockYarnClientFactory.EXPECT().CreateDefaultYarnClient().Return(yarnClient, tt.fields.yarnClientErrorFromFactory)
+			}
+			if tt.fields.doUpdate {
+				yarnClient.EXPECT().UpdateNodeResource(gomock.Any()).Return(nil, tt.fields.updateNodeResourceError)
+			}
+			if tt.fields.doReinit {
+				yarnClient.EXPECT().Reinitialize().Return(tt.fields.reinitError)
+			}
+
+			r := &YARNResourceSyncReconciler{}
+			if err := r.updateYARNNodeResource(tt.args.yarnNode, tt.args.vcores, tt.args.memoryMB); (err != nil) != tt.wantErr {
+				t.Errorf("updateYARNNodeResource() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestYARNResourceSyncReconciler_getYARNNodeAllocatedResource(t *testing.T) {
+	type args struct {
+		yarnNode *cache.YarnNode
+	}
+	tests := []struct {
+		name         string
+		args         args
+		wantVcores   int32
+		wantMemoryMB int64
+		wantErr      bool
+	}{
+		{
+			name: "nil node return nothing",
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name: "test-yarn-node",
+					Port: 8041,
+				},
+			},
+			wantVcores:   0,
+			wantMemoryMB: 0,
+			wantErr:      false,
+		},
+		{
+			name: "get yarn node not exist",
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name: "test-yarn-node",
+					Port: 8041,
+				},
+			},
+			wantVcores:   0,
+			wantMemoryMB: 0,
+			wantErr:      false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockYarnClientFactory := mock_client.NewMockYarnClientFactory(ctrl)
+			yarnclient.DefaultYarnClientFactory = mockYarnClientFactory
+			yarnClient := mock_client.NewMockYarnClient(ctrl)
+			yarnNodeCache := cache.NewNodesSyncer(map[string]yarnclient.YarnClient{"default": yarnClient})
+
+			r := &YARNResourceSyncReconciler{
+				yarnNodeCache: yarnNodeCache,
+			}
+			gotVcores, gotMemoryMB, err := r.getYARNNodeAllocatedResource(tt.args.yarnNode)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("getYARNNodeAllocatedResource() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if gotVcores != tt.wantVcores {
+				t.Errorf("getYARNNodeAllocatedResource() gotVcores = %v, want %v", gotVcores, tt.wantVcores)
+			}
+			if gotMemoryMB != tt.wantMemoryMB {
+				t.Errorf("getYARNNodeAllocatedResource() gotMemoryMB = %v, want %v", gotMemoryMB, tt.wantMemoryMB)
+			}
 		})
 	}
 }

@@ -31,14 +31,16 @@ const (
 	syncInterval = time.Second
 )
 
+// YARN RM only supports get all nodes from cluster, sync to cache for efficiency
 type NodesSyncer struct {
-	yarnClients map[string]*yarnclient.YarnClient
+	yarnClients map[string]yarnclient.YarnClient
 
+	// <ClusterID, <NodeID, NodeInfo>>
 	cache map[string]map[string]*hadoopyarn.NodeReportProto
 	mtx   sync.RWMutex
 }
 
-func NewNodesSyncer(yarnClients map[string]*yarnclient.YarnClient) *NodesSyncer {
+func NewNodesSyncer(yarnClients map[string]yarnclient.YarnClient) *NodesSyncer {
 	return &NodesSyncer{
 		yarnClients: yarnClients,
 		cache:       map[string]map[string]*hadoopyarn.NodeReportProto{},
@@ -72,7 +74,7 @@ func (r *NodesSyncer) Sync() {
 		select {
 		case <-t.C:
 			if err := r.syncYARNNodeAllocatedResource(); err != nil {
-				klog.Error(err)
+				klog.Errorf("sync yarn node allocated resource failed, error: %v", err)
 			}
 		case <-debug.C:
 			r.debug()
@@ -113,12 +115,13 @@ func (r *NodesSyncer) syncYARNNodeAllocatedResource() error {
 	for id, yarnClient := range r.yarnClients {
 		nodes, err := yarnClient.GetClusterNodes(&req)
 		if err != nil {
-			return err
+			initErr := yarnClient.Reinitialize()
+			return fmt.Errorf("GetClusterNodes error %v, reinitialize error %v", err, initErr)
 		}
 		clusterCache := map[string]*hadoopyarn.NodeReportProto{}
 		for _, reportProto := range nodes.GetNodeReports() {
 			if reportProto.NodeId.Host == nil || reportProto.NodeId.Port == nil {
-				klog.Warningf("nil node from rm")
+				klog.Warningf("got nil node from rm %v", id)
 				continue
 			}
 			key := r.getKey(*reportProto.NodeId.Host, *reportProto.NodeId.Port)

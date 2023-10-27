@@ -18,8 +18,6 @@ package client
 
 import (
 	"fmt"
-	"os"
-
 	"k8s.io/klog/v2"
 
 	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
@@ -28,7 +26,18 @@ import (
 	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
 )
 
-type YarnClient struct {
+type YarnClient interface {
+	Initialize() error
+	Reinitialize() error
+	Close()
+	UpdateNodeResource(request *yarnserver.UpdateNodeResourceRequestProto) (*yarnserver.UpdateNodeResourceResponseProto, error)
+	GetClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error)
+}
+
+var _ YarnClient = &yarnClient{}
+
+type yarnClient struct {
+	confDir              string
 	conf                 yarnconf.YarnConfiguration
 	haEnabled            bool
 	activeRMAdminAddress *string
@@ -36,26 +45,12 @@ type YarnClient struct {
 	clusterID            string
 }
 
-func CreateYarnClient() (*YarnClient, error) {
-	c := &YarnClient{}
-	if err := c.initialize(); err != nil {
-		return nil, err
-	}
-	return c, nil
+func NewYarnClient(confDir string, clusterID string) YarnClient {
+	return &yarnClient{confDir: confDir, clusterID: clusterID}
 }
 
-func CreateYarnClientByClusterID(clusterID string) (*YarnClient, error) {
-	c := &YarnClient{
-		clusterID: clusterID,
-	}
-	if err := c.initialize(); err != nil {
-		return nil, err
-	}
-	return c, nil
-}
-
-func (c *YarnClient) initialize() error {
-	if conf, err := yarnconf.NewYarnConfiguration(os.Getenv("HADOOP_CONF_DIR"), c.clusterID); err == nil {
+func (c *yarnClient) Initialize() error {
+	if conf, err := yarnconf.NewYarnConfiguration(c.confDir, c.clusterID); err == nil {
 		// TODO use flags for conf dir config
 		c.conf = conf
 	} else {
@@ -103,19 +98,19 @@ func (c *YarnClient) initialize() error {
 	return nil
 }
 
-func (c *YarnClient) Close() {
+func (c *yarnClient) Close() {
 	c.activeRMAdminAddress = nil
 	c.activeRMAddress = nil
 }
 
-func (c *YarnClient) Reinitialize() error {
+func (c *yarnClient) Reinitialize() error {
 	c.Close()
-	return c.initialize()
+	return c.Initialize()
 }
 
-func (c *YarnClient) UpdateNodeResource(request *yarnserver.UpdateNodeResourceRequestProto) (*yarnserver.UpdateNodeResourceResponseProto, error) {
+func (c *yarnClient) UpdateNodeResource(request *yarnserver.UpdateNodeResourceRequestProto) (*yarnserver.UpdateNodeResourceResponseProto, error) {
 	if c.activeRMAdminAddress == nil && c.haEnabled {
-		if err := c.initialize(); err != nil {
+		if err := c.Initialize(); err != nil {
 			return nil, err
 		}
 	}
@@ -123,9 +118,9 @@ func (c *YarnClient) UpdateNodeResource(request *yarnserver.UpdateNodeResourceRe
 	return c.updateNodeResource(request)
 }
 
-func (c *YarnClient) GetClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
+func (c *yarnClient) GetClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
 	if c.activeRMAdminAddress == nil && c.haEnabled {
-		if err := c.initialize(); err != nil {
+		if err := c.Initialize(); err != nil {
 			return nil, err
 		}
 	}
@@ -133,7 +128,7 @@ func (c *YarnClient) GetClusterNodes(request *hadoopyarn.GetClusterNodesRequestP
 	return c.getClusterNodes(request)
 }
 
-func (c *YarnClient) GetActiveRMID() (string, error) {
+func (c *yarnClient) GetActiveRMID() (string, error) {
 	rmIDs, err := c.conf.GetRMs()
 	if err != nil {
 		return "", err
@@ -159,7 +154,7 @@ func (c *YarnClient) GetActiveRMID() (string, error) {
 	return "", fmt.Errorf("active rm not found in %v", rmIDs)
 }
 
-func (c *YarnClient) updateNodeResource(request *yarnserver.UpdateNodeResourceRequestProto) (*yarnserver.UpdateNodeResourceResponseProto, error) {
+func (c *yarnClient) updateNodeResource(request *yarnserver.UpdateNodeResourceRequestProto) (*yarnserver.UpdateNodeResourceResponseProto, error) {
 	// TODO keep client alive instead of create every time
 	adminClient, err := CreateYarnAdminClient(c.conf, c.activeRMAdminAddress)
 	if err != nil {
@@ -168,7 +163,7 @@ func (c *YarnClient) updateNodeResource(request *yarnserver.UpdateNodeResourceRe
 	return adminClient.UpdateNodeResource(request)
 }
 
-func (c *YarnClient) getClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
+func (c *yarnClient) getClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
 	// TODO keep client alive instead of create every time
 	applicationClient, err := CreateYarnApplicationClient(c.conf, c.activeRMAddress)
 	if err != nil {
