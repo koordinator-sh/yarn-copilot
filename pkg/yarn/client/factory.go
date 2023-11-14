@@ -27,6 +27,8 @@ import (
 
 const (
 	envHadoopConfDir = "HADOOP_CONF_DIR"
+
+	DefaultClusterID = "__default_yarn_cluster__"
 )
 
 type YarnClientFactory interface {
@@ -66,11 +68,18 @@ func (f *yarnClientFactory) CreateAllYarnClients() (map[string]YarnClient, error
 	for _, id := range ids {
 		yClient, err := f.CreateYarnClientByClusterID(id)
 		if err != nil {
-			klog.Error(err)
+			klog.Errorf("create yarn client %v failed, error %v", id, err)
 			return nil, err
 		}
 		clients[id] = yClient
-		klog.V(3).Infof("init yarn client %s", id)
+		klog.V(3).Infof("init yarn client %v", id)
+	}
+	if defaultClient, err := f.CreateDefaultYarnClient(); err == nil {
+		clients[DefaultClusterID] = defaultClient
+		klog.V(3).Infof("init yarn client %v", defaultClient)
+	} else {
+		klog.Errorf("create yarn client %v failed, error %v", DefaultClusterID, err)
+		return nil, err
 	}
 	return clients, nil
 }

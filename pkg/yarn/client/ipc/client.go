@@ -124,7 +124,7 @@ func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Me
 func findUsableTokenForService(service string) (*hadoop_common.TokenProto, bool) {
 	userTokens := security.GetCurrentUser().GetUserTokens()
 
-	klog.V(4).Infof("looking for token for service: %s\n", service)
+	klog.V(5).Infof("looking for token for service: %s\n", service)
 
 	if len(userTokens) == 0 {
 		return nil, false
@@ -178,7 +178,7 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 		}
 
 	} else {
-		klog.V(4).Infof("no usable tokens. proceeding without auth.")
+		klog.V(5).Infof("no usable tokens. proceeding without auth.")
 	}
 
 	err = writeConnectionContext(c, con, connectionId, authProtocol)
@@ -197,7 +197,7 @@ func setupConnection(c *Client) (*connection, error) {
 		klog.V(4).Infof("error: %v", err)
 		return nil, err
 	} else {
-		klog.V(4).Infof("Successfully connected %v", c)
+		klog.V(5).Infof("Successfully connected %v", c)
 	}
 
 	tcpConn, ok := conn.(*net.TCPConn)
