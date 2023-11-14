@@ -48,8 +48,8 @@ const (
 
 type YARNResourceSyncReconciler struct {
 	client.Client
-	yarnClient    *yarnclient.YarnClient
-	yarnClients   map[string]*yarnclient.YarnClient
+	yarnClient    yarnclient.YarnClient
+	yarnClients   map[string]yarnclient.YarnClient
 	yarnNodeCache *cache.NodesSyncer
 }
 
@@ -119,18 +119,16 @@ func getNodeBatchResource(node *corev1.Node) (batchCPU resource.Quantity, batchM
 	if !memExist {
 		batchMemory = *resource.NewQuantity(0, resource.BinarySI)
 	}
-	if node.Annotations == nil || len(node.Annotations[NodeOriginAllocatableAnnotationKey]) == 0 {
+	originAllocatableRes, err := GetOriginExtendedAllocatableRes(node.Annotations)
+	if err == nil && originAllocatableRes == nil {
 		// koordiantor <= 1.3.0, use node status as origin batch total
 		return
-	}
-
-	originAllocatable, err := GetOriginExtendAllocatable(node.Annotations)
-	if err != nil {
+	} else if err != nil {
 		klog.Warningf("get origin allocatable from node %v annotation failed, error: %v", node.Name, err)
 		return
 	}
-	batchCPU, cpuExist = originAllocatable.Resources[BatchCPU]
-	batchMemory, memExist = originAllocatable.Resources[BatchMemory]
+	batchCPU, cpuExist = originAllocatableRes[BatchCPU]
+	batchMemory, memExist = originAllocatableRes[BatchMemory]
 	if !cpuExist {
 		batchCPU = *resource.NewQuantity(0, resource.DecimalSI)
 	}
@@ -144,19 +142,11 @@ func (r *YARNResourceSyncReconciler) updateYARNAllocatedResource(node *corev1.No
 	if node == nil {
 		return nil
 	}
-	nodeAllocated := &NodeAllocated{
-		YARNAllocated: map[corev1.ResourceName]resource.Quantity{
-			BatchCPU:    *resource.NewQuantity(int64(vcores), resource.DecimalSI),
-			BatchMemory: *resource.NewQuantity(memoryMB*1024*1024, resource.BinarySI),
-		},
-	}
-
-	nodeAllocatedStr, err := json.Marshal(nodeAllocated)
-	if err != nil {
+	newNode := node.DeepCopy()
+	if err := SetYARNAllocatedResource(newNode.Annotations, vcores, memoryMB); err != nil {
 		return err
 	}
-	newNode := node.DeepCopy()
-	newNode.Annotations[NodeAllocatedResourceAnnotationKey] = string(nodeAllocatedStr)
+
 	oldData, err := json.Marshal(node)
 	if err != nil {
 		return fmt.Errorf("failed to marshal the existing node %#v: %v", node, err)
@@ -175,7 +165,7 @@ func (r *YARNResourceSyncReconciler) updateYARNAllocatedResource(node *corev1.No
 }
 
 func Add(mgr ctrl.Manager) error {
-	clients, err := yarnclient.GetAllKnownClients()
+	clients, err := yarnclient.DefaultYarnClientFactory.CreateAllYarnClients()
 	if err != nil {
 		return err
 	}
@@ -251,13 +241,16 @@ func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*cache.Yarn
 		Name: tokens[0],
 		Port: int32(port),
 	}
-	if clusterID, exist := nmPod.Annotations[YarnClusterIDAnnotation]; exist {
+	if clusterID, exist := nmPod.Annotations[PodYarnClusterIDAnnotationKey]; exist {
 		yarnNode.ClusterID = clusterID
 	}
 	return yarnNode, nil
 }
 
 func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.YarnNode, vcores, memoryMB int64) error {
+	if yarnNode == nil {
+		return nil
+	}
 	request := &yarnserver.UpdateNodeResourceRequestProto{
 		NodeResourceMap: []*hadoopyarn.NodeResourceMapProto{
 			{
@@ -275,7 +268,7 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.Yarn
 		},
 	}
 	yarnClient, err := r.getYARNClient(yarnNode)
-	if err != nil {
+	if err != nil || yarnClient == nil {
 		return err
 	}
 	if resp, err := yarnClient.UpdateNodeResource(request); err != nil {
@@ -285,11 +278,13 @@ func (r *YARNResourceSyncReconciler) updateYARNNodeResource(yarnNode *cache.Yarn
 	return nil
 }
 
-func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *cache.YarnNode) (*yarnclient.YarnClient, error) {
-	if yarnNode.ClusterID == "" && r.yarnClient != nil {
+func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *cache.YarnNode) (yarnclient.YarnClient, error) {
+	if yarnNode == nil {
+		return nil, nil
+	} else if yarnNode.ClusterID == "" && r.yarnClient != nil {
 		return r.yarnClient, nil
 	} else if yarnNode.ClusterID == "" && r.yarnClient == nil {
-		yarnClient, err := yarnclient.CreateYarnClient()
+		yarnClient, err := yarnclient.DefaultYarnClientFactory.CreateDefaultYarnClient()
 		if err != nil {
 			return nil, err
 		}
@@ -302,15 +297,21 @@ func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *cache.YarnNode) (*y
 		return clusterClient, nil
 	}
 	// create new client by cluster id
-	clusterClient, err := yarnclient.CreateYarnClientByClusterID(yarnNode.ClusterID)
+	clusterClient, err := yarnclient.DefaultYarnClientFactory.CreateYarnClientByClusterID(yarnNode.ClusterID)
 	if err != nil {
 		return nil, err
+	}
+	if r.yarnClients == nil {
+		r.yarnClients = map[string]yarnclient.YarnClient{}
 	}
 	r.yarnClients[yarnNode.ClusterID] = clusterClient
 	return clusterClient, nil
 }
 
 func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *cache.YarnNode) (vcores int32, memoryMB int64, err error) {
+	if yarnNode == nil {
+		return 0, 0, nil
+	}
 	nodeResource, exist := r.yarnNodeCache.GetNodeResource(yarnNode)
 	if !exist {
 		return 0, 0, nil

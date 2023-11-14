@@ -24,8 +24,8 @@ import (
 )
 
 func main() {
-	// Create YarnClient
-	yarnClient, _ := yarnclient.CreateYarnClient()
+	// Create yarnClient
+	yarnClient, _ := yarnclient.DefaultYarnClientFactory.CreateDefaultYarnClient()
 
 	request := &hadoopyarn.GetClusterNodesRequestProto{
 		NodeStates: []hadoopyarn.NodeStateProto{},

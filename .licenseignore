@@ -1,4 +1,6 @@
 vendor
-pkg/yarn/apis
+pkg/yarn/apis/auth
+pkg/yarn/apis/proto
+pkg/yarn/apis/security
 pkg/yarn/client/ipc
 pkg/yarn/config
