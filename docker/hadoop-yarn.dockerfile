@@ -1,6 +1,6 @@
 FROM alpine:3.14 as BUILDER
 
-ENV HADOOP_VERSION 3.3.2
+ENV HADOOP_VERSION 3.3.3
 ENV SPARK_VERSION 3.3.3
 
 RUN apk update \
@@ -14,7 +14,7 @@ RUN curl -s -o /tmp/spark.tgz https://mirrors.aliyun.com/apache/spark/spark-${SP
 
 FROM openjdk:8
 
-ENV HADOOP_VERSION 3.3.2
+ENV HADOOP_VERSION 3.3.3
 ENV SPARK_VERSION 3.3.3
 ENV SPARK_HOME=/opt/spark
 ENV HADOOP_HOME=/opt/hadoop
@@ -29,6 +29,14 @@ ENV HADOOP_COMMON_HOME=${HADOOP_HOME} \
 COPY --from=BUILDER /opt/hadoop-${HADOOP_VERSION} ${HADOOP_HOME}
 COPY --from=BUILDER /opt/spark-${SPARK_VERSION}-bin-hadoop3 ${SPARK_HOME}
 
-RUN apt-get update && apt-get install -y dnsutils
+RUN apt-get update && apt-get install -y apt-transport-https
+RUN curl https://mirrors.aliyun.com/kubernetes/apt/doc/apt-key.gpg | apt-key add -
+RUN echo 'deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main' >> /etc/apt/sources.list.d/kubernetes.list
+#RUN cat <<EOF >/etc/apt/sources.list.d/kubernetes.list \
+#    deb https://mirrors.aliyun.com/kubernetes/apt/ kubernetes-xenial main \
+#    EOF
+
+RUN apt-get update
+RUN apt-get install -y kubectl dnsutils
 
 WORKDIR $HADOOP_HOME
