@@ -98,7 +98,7 @@ build: build-yarn-operator
 
 .PHONY: build-yarn-copilot
 build-yarn-copilot: ## Build yarn-copilot binary.
-	go build -o bin/yarn-copilot cmd/yarn-copilot/main.go
+	go build -o bin/yarn-copilot cmd/yarn-copilot-agent/main.go
 
 .PHONY: build-yarn-operator
 build-yarn-operator: ## Build yarn-operator binary.
