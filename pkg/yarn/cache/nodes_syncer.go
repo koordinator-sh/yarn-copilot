@@ -17,6 +17,7 @@ limitations under the License.
 package cache
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -67,19 +68,25 @@ func (r *NodesSyncer) getKey(yarnNodeName string, yarnNodePort int32) string {
 	return fmt.Sprintf("%s-%d", yarnNodeName, yarnNodePort)
 }
 
-func (r *NodesSyncer) Sync() {
+func (r *NodesSyncer) Start(ctx context.Context) error {
 	t := time.NewTicker(syncInterval)
 	debug := time.NewTicker(syncInterval * 10)
-	for {
-		select {
-		case <-t.C:
-			if err := r.syncYARNNodeAllocatedResource(); err != nil {
-				klog.Errorf("sync yarn node allocated resource failed, error: %v", err)
+	go func() {
+		for {
+			select {
+			case <-t.C:
+				if err := r.syncYARNNodeAllocatedResource(); err != nil {
+					klog.Errorf("sync yarn node allocated resource failed, error: %v", err)
+				}
+			case <-debug.C:
+				r.debug()
+			case <-ctx.Done():
+				klog.V(1).Infof("stop node syncer")
+				return
 			}
-		case <-debug.C:
-			r.debug()
 		}
-	}
+	}()
+	return nil
 }
 
 func (r *NodesSyncer) debug() {

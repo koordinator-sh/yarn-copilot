@@ -82,13 +82,13 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	// TODO exclude batch pod requested
 	batchCPU, batchMemory, err := getNodeBatchResource(node)
 	if err != nil {
-		return ctrl.Result{}, err
+		return ctrl.Result{Requeue: true}, err
 	}
 	klog.V(4).Infof("get node batch resource cpu: %d, memory: %d, name: %s", batchCPU.Value(), batchMemory.Value(), node.Name)
 
 	vcores, memoryMB := calculate(batchCPU, batchMemory)
 
-	// TODO control update frequency
+	// TODO control update frequency by ignore unnecessary node update event
 	if err := r.updateYARNNodeResource(yarnNode, vcores, memoryMB); err != nil {
 		klog.Warningf("update batch resource to yarn node %+v failed, k8s node name: %s, error %v", yarnNode, node.Name, err)
 		return ctrl.Result{Requeue: true}, err
@@ -98,7 +98,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 
 	core, mb, err := r.getYARNNodeAllocatedResource(yarnNode)
 	if err != nil {
-		return reconcile.Result{}, err
+		return reconcile.Result{Requeue: true}, err
 	}
 	if err := r.updateYARNAllocatedResource(node, core, mb); err != nil {
 		klog.Warningf("failed to update yarn allocated resource for node %v, error %v", node.Name, err)
@@ -171,7 +171,7 @@ func Add(mgr ctrl.Manager) error {
 		return err
 	}
 	yarnNodesSyncer := cache.NewNodesSyncer(clients)
-	go yarnNodesSyncer.Sync()
+
 	coll := yarnmetrics.NewYarnMetricCollector(yarnNodesSyncer)
 	if err = metrics.Registry.Register(coll); err != nil {
 		return err
@@ -181,10 +181,15 @@ func Add(mgr ctrl.Manager) error {
 		yarnClients:   clients,
 		yarnNodeCache: yarnNodesSyncer,
 	}
+
+	if err := mgr.Add(yarnNodesSyncer); err != nil {
+		return err
+	}
 	return r.SetupWithManager(mgr)
 }
 
 func (r *YARNResourceSyncReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	// TODO use source.Channel to handle yarn node requested update event
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&corev1.Node{}).
 		Named(Name).

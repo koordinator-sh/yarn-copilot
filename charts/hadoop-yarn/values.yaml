@@ -4,7 +4,7 @@ installation:
 image:
   repository: registry.cn-hangzhou.aliyuncs.com/koordinator-sh/apache-hadoop
   tag: 3.3.2-v1.0
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 # The version of the hadoop libraries being used in the image.
 hadoopVersion: 3.3.2
@@ -49,6 +49,10 @@ yarn:
       # yarn.hadoop.apache.org/node-role: yarn-nm
 
     serviceName: node-manager
+
+    # initial cpu and memory of nm reported
+    initCPUVCores: 1
+    initMemoryMB: 1024
 
   config:
     yarnSite:

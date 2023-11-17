@@ -67,17 +67,20 @@ data:
       cat >> $HADOOP_HOME/etc/hadoop/yarn-site.xml <<- EOM
       <property>
         <name>yarn.nodemanager.resource.memory-mb</name>
-        <value>${NM_INIT_MEMORY_MB:-2048}</value>
+        <value>${NM_INIT_MEMORY_MB:-1024}</value>
       </property>
       <property>
         <name>yarn.nodemanager.resource.cpu-vcores</name>
-        <value>${NM_INIT_CPU_CORES:-2}</value>
+        <value>${NM_INIT_CPU_CORES:-1}</value>
       </property>
       <property>
         <name>yarn.nodemanager.address</name>
         <value>${HOSTNAME}:8041</value>
       </property>
     EOM
+
+      # annotate nm id on pod
+      kubectl annotate pod -n ${POD_NAMESPACE} ${POD_NAME} yarn.hadoop.apache.org/node-id=${HOSTNAME}:8041
 
       echo '</configuration>' >> $HADOOP_HOME/etc/hadoop/yarn-site.xml
 
@@ -89,7 +92,6 @@ data:
         echo "$0: Timeout waiting for $TMP_URL, exiting."
         exit 1
       fi
-
     fi
 
     # ------------------------------------------------------
