@@ -20,7 +20,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
-	"github.com/koordinator-sh/goyarn/pkg/copilot/nm"
+	"github.com/koordinator-sh/goyarn/pkg/copilot-agent/nm"
 )
 
 func ParseContainerInfo(yarnContainer *nm.YarnContainer, op *nm.NodeMangerOperator) *ContainerInfo {

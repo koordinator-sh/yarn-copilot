@@ -9,7 +9,7 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY pkg/ pkg/
 
-RUN GOOS=linux GOARCH=amd64 go build -a -o koord-yarn-copilot cmd/yarn-copilot/main.go
+RUN GOOS=linux GOARCH=amd64 go build -a -o koord-yarn-copilot cmd/yarn-copilot-agent/main.go
 
 FROM nvidia/cuda:11.2.2-base-ubuntu20.04
 RUN apt-get add --update bash net-tools iproute2 logrotate less rsync util-linux lvm2
