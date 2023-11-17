@@ -1,13 +1,13 @@
 <h1 align="center">
-  <p align="center">Koordinator goyarn</p>
+  <p align="center">Koordinator YARN Copilot</p>
   <a href="https://koordinator.sh"><img src="https://github.com/koordinator-sh/koordinator/raw/main/docs/images/koordinator-logo.jpeg" alt="Koordinator"></a>
 </h1>
 
 [![License](https://img.shields.io/github/license/koordinator-sh/koordinator.svg?color=4EB1BA&style=flat-square)](https://opensource.org/licenses/Apache-2.0)
-[![GitHub release](https://img.shields.io/github/v/release/koordinator-sh/goyarn.svg?style=flat-square)](https://github.com/koordinator-sh/goyarn/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/koordinator-sh/goyarn/ci.yaml?label=CI&logo=github&style=flat-square&branch=main)](https://github.com/koordinator-sh/goyarn/actions/workflows/ci.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/koordinator-sh/goyarn?style=flat-square)](https://goreportcard.com/report/github.com/koordinator-sh/goyarn)
-[![codecov](https://img.shields.io/codecov/c/github/koordinator-sh/goyarn?logo=codecov&style=flat-square)](https://codecov.io/github/koordinator-sh/goyarn)
+[![GitHub release](https://img.shields.io/github/v/release/koordinator-sh/yarn-copilot.svg?style=flat-square)](https://github.com/koordinator-sh/yarn-copilot/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/koordinator-sh/yarn-copilot/ci.yaml?label=CI&logo=github&style=flat-square&branch=main)](https://github.com/koordinator-sh/yarn-copilot/actions/workflows/ci.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/koordinator-sh/yarn-copilot?style=flat-square)](https://goreportcard.com/report/github.com/koordinator-sh/yarn-copilot)
+[![codecov](https://img.shields.io/codecov/c/github/koordinator-sh/yarn-copilot?logo=codecov&style=flat-square)](https://codecov.io/github/koordinator-sh/yarn-copilot)
 [![PRs Welcome](https://badgen.net/badge/PRs/welcome/green?icon=https://api.iconify.design/octicon:git-pull-request.svg?color=white&style=flat-square)](CONTRIBUTING.md)
 [![Slack](https://badgen.net/badge/slack/join/4A154B?icon=slack&style=flat-square)](https://join.slack.com/t/koordinator-sh/shared_invite/zt-1756qoub4-Cn4~esfdlfAPsD7cwO2NzA)
 
@@ -20,8 +20,9 @@ Koordinator已经支持了K8s生态内的在离线混部，通过Batch超卖资�
 在K8s生态外，仍有相当数量的应用运行在其他资源管理系统，例如Apache Hadoop YARN。作为大数据生态下的资源管理系统，YARN承载了包括MapReduce、
 Spark、Flink以及Presto等在内的多种计算引擎。
 
-为了进一步丰富Koordinator支持的在离线混部场景，Koordinator社区提供了面向大数据场景的YARN混部套件，支持Hadoop YARN应用与K8s混部，
-将Koordiantor的Batch资源提供给Hadoop YARN使用，进一步提升集群资源的使用效率。Koordinator YARN混部套件具备以下特点：
+为了进一步丰富Koordinator支持的在离线混部场景，Koordinator社区提供了面向大数据场景的YARN混部套件`Koordinator YARN Copilot`,
+用于支持Hadoop YARN应用与K8s混部，将Koordiantor的Batch资源提供给Hadoop YARN使用，进一步提升集群资源的使用效率。
+`Koordinator YARN Copilot`具备以下特点：
 
 - 面向开源生态：针对开源版本的Hadoop YARN实现，无需对YARN本身做侵入式改造。
 - 统一资源优先级和QoS策略：YARN混部套件完全对标Koordinator的Batch资源模型，同时接受单机一系列QoS策略的管控。

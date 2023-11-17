@@ -1,13 +1,13 @@
 <h1 align="center">
-  <p align="center">Koordinator goyarn</p>
+  <p align="center">Koordinator YARN Copilot</p>
   <a href="https://koordinator.sh"><img src="https://github.com/koordinator-sh/koordinator/raw/main/docs/images/koordinator-logo.jpeg" alt="Koordinator"></a>
 </h1>
 
 [![License](https://img.shields.io/github/license/koordinator-sh/koordinator.svg?color=4EB1BA&style=flat-square)](https://opensource.org/licenses/Apache-2.0)
-[![GitHub release](https://img.shields.io/github/v/release/koordinator-sh/goyarn.svg?style=flat-square)](https://github.com/koordinator-sh/goyarn/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/koordinator-sh/goyarn/ci.yaml?label=CI&logo=github&style=flat-square&branch=main)](https://github.com/koordinator-sh/goyarn/actions/workflows/ci.yaml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/koordinator-sh/goyarn?style=flat-square)](https://goreportcard.com/report/github.com/koordinator-sh/goyarn)
-[![codecov](https://img.shields.io/codecov/c/github/koordinator-sh/goyarn?logo=codecov&style=flat-square)](https://codecov.io/github/koordinator-sh/goyarn)
+[![GitHub release](https://img.shields.io/github/v/release/koordinator-sh/yarn-copilot.svg?style=flat-square)](https://github.com/koordinator-sh/yarn-copilot/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/koordinator-sh/yarn-copilot/ci.yaml?label=CI&logo=github&style=flat-square&branch=main)](https://github.com/koordinator-sh/yarn-copilot/actions/workflows/ci.yaml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/koordinator-sh/yarn-copilot?style=flat-square)](https://goreportcard.com/report/github.com/koordinator-sh/yarn-copilot)
+[![codecov](https://img.shields.io/codecov/c/github/koordinator-sh/yarn-copilot?logo=codecov&style=flat-square)](https://codecov.io/github/koordinator-sh/yarn-copilot)
 [![PRs Welcome](https://badgen.net/badge/PRs/welcome/green?icon=https://api.iconify.design/octicon:git-pull-request.svg?color=white&style=flat-square)](CONTRIBUTING.md)
 [![Slack](https://badgen.net/badge/slack/join/4A154B?icon=slack&style=flat-square)](https://join.slack.com/t/koordinator-sh/shared_invite/zt-1756qoub4-Cn4~esfdlfAPsD7cwO2NzA)
 
@@ -21,8 +21,8 @@ running beyond K8s such as Apache Haddop YARN. As a resource management platform
 numbers of computing engines including MapReduce, Spark, Flink, Presto, etc.
 
 In order to extend the co-location scenario of Koordinator, now the community has provided Hadoop YARN extended suits
-in BigData ecosystem, supporting running Hadoop YARN jobs by `koord-batch` resources with other K8s pods. The Koordiantor
-YARN suits has following characters:
+`Koordinator YARN Copilot` in BigData ecosystem, supporting running Hadoop YARN jobs by `koord-batch` resources with 
+other K8s pods. The `Koordinator YARN Copilot` has following characters:
 
 - Open-Source native: implement against open-sourced version of Hadoop YARN; so there is no hack inside YARN modules.
 - Unifed resource priority and QoS strategy: the suits aims to the `koord-batch` priority of Koordinator, and also managed by QoS strategies of koordlet.

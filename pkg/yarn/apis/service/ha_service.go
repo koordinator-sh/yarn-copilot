@@ -23,9 +23,9 @@ import (
 	uuid "github.com/nu7hatch/gouuid"
 	"google.golang.org/protobuf/proto"
 
-	gohadoop "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
-	hadoop_ipc_client "github.com/koordinator-sh/goyarn/pkg/yarn/client/ipc"
+	gohadoop "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/auth"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	hadoop_ipc_client "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client/ipc"
 )
 
 // Reference proto, json, and math imports to suppress error if they are not otherwise used.

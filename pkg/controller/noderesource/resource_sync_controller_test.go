@@ -32,9 +32,9 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/client/mockclient"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/cache"
+	yarnclient "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/client/mockclient"
 )
 
 func TestYARNResourceSyncReconciler_getYARNNode(t *testing.T) {

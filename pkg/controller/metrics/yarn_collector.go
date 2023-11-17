@@ -19,7 +19,7 @@ package metrics
 import (
 	"github.com/prometheus/client_golang/prometheus"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/cache"
 )
 
 var (

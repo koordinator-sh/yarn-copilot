@@ -19,7 +19,7 @@ package options
 import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 
-	yarnnoderes "github.com/koordinator-sh/goyarn/pkg/controller/noderesource"
+	yarnnoderes "github.com/koordinator-sh/yarn-copilot/pkg/controller/noderesource"
 )
 
 var controllerAddFuncs = map[string]func(manager.Manager) error{

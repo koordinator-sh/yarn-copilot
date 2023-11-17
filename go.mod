@@ -1,4 +1,4 @@
-module github.com/koordinator-sh/goyarn
+module github.com/koordinator-sh/yarn-copilot
 
 go 1.19
 

@@ -20,10 +20,10 @@ import (
 	"fmt"
 	"k8s.io/klog/v2"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
-	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn"
+	yarnserver "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn/server"
+	yarnconf "github.com/koordinator-sh/yarn-copilot/pkg/yarn/config"
 )
 
 type YarnClient interface {

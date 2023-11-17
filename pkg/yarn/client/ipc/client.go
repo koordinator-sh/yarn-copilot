@@ -32,9 +32,9 @@ import (
 	"google.golang.org/protobuf/proto"
 	"k8s.io/klog/v2"
 
-	yarnauth "github.com/koordinator-sh/goyarn/pkg/yarn/apis/auth"
-	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/security"
+	yarnauth "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/auth"
+	hadoop_common "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/security"
 )
 
 const (

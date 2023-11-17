@@ -20,7 +20,7 @@ set -e
 SHELL_FOLDER=$(cd "$(dirname "$0")";pwd)
 LICENSE_HEADER_PATH="./hack/boilerplate/boilerplate.go.txt"
 
-cd $GOPATH/src/github.com/koordinator-sh/goyarn
+cd $GOPATH/src/github.com/koordinator-sh/yarn-copilot
 
 # generates gomock files
 mockgen -source pkg/yarn/client/factory.go \

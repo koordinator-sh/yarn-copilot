@@ -19,9 +19,9 @@ package main
 import (
 	"log"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn"
+	yarnserver "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn/server"
+	yarnclient "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
 )
 
 func main() {

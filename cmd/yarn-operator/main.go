@@ -30,9 +30,9 @@ import (
 	"k8s.io/klog/v2/klogr"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"github.com/koordinator-sh/goyarn/cmd/yarn-operator/options"
 	utilclient "github.com/koordinator-sh/koordinator/pkg/util/client"
 	"github.com/koordinator-sh/koordinator/pkg/util/fieldindex"
+	"github.com/koordinator-sh/yarn-copilot/cmd/yarn-operator/options"
 )
 
 var (

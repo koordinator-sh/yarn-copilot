@@ -35,11 +35,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
-	yarnmetrics "github.com/koordinator-sh/goyarn/pkg/controller/metrics"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnserver "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
-	"github.com/koordinator-sh/goyarn/pkg/yarn/cache"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	yarnmetrics "github.com/koordinator-sh/yarn-copilot/pkg/controller/metrics"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn"
+	yarnserver "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn/server"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/cache"
+	yarnclient "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
 )
 
 const (

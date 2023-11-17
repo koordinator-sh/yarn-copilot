@@ -17,8 +17,8 @@ limitations under the License.
 package client
 
 import (
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
-	yarnservice "github.com/koordinator-sh/goyarn/pkg/yarn/apis/service"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	yarnservice "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/service"
 )
 
 type YarnHAClient struct {
