@@ -12,7 +12,7 @@ data:
         </property>
         <property>
             <name>yarn.resourcemanager.address</name>
-            <value>{{ .Values.yarnConfiguration.resourceManagerAddress }}:{{ .Values.yarnConfiguration.resourceManager.port }}</value>
+            <value>{{ .Values.yarnConfiguration.resourceManager.address }}:{{ .Values.yarnConfiguration.resourceManager.port }}</value>
         </property>
     </configuration>
   core-site.xml: |

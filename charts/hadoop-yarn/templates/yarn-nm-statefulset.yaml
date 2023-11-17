@@ -45,6 +45,9 @@ spec:
       setHostnameAsFQDN: true
       terminationGracePeriodSeconds: 0
       dnsPolicy: ClusterFirst
+{{- if .Values.yarn.nodeManager.useBatchResource }}
+      priorityClassName: koord-batch
+{{- end }}
       hostNetwork: false
       nodeSelector:
 {{ toYaml .Values.yarn.nodeManager.nodeSelector | indent 8 }}

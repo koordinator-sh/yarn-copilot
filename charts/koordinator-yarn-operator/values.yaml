@@ -12,7 +12,7 @@ koordYarnOperator:
   image:
     repository: koordinator-sh/yarn-operator
     #tag: "v0.1.0"
-    tag: "add-code-cov-6eea79c"
+    tag: "fix-get-cluster-node-76a9b0c"
   metrics:
     port: 8080
 

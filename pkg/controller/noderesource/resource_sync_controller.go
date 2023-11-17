@@ -19,12 +19,12 @@ package noderesource
 import (
 	"context"
 	"fmt"
+	"k8s.io/apimachinery/pkg/types"
 	"strconv"
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
-	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
 	"k8s.io/cri-api/pkg/errors"
@@ -101,7 +101,8 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 		return reconcile.Result{}, err
 	}
 	if err := r.updateYARNAllocatedResource(node, core, mb); err != nil {
-		return reconcile.Result{}, err
+		klog.Warningf("failed to update yarn allocated resource for node %v, error %v", node.Name, err)
+		return reconcile.Result{Requeue: true}, err
 	}
 	return ctrl.Result{}, nil
 }
@@ -160,8 +161,8 @@ func (r *YARNResourceSyncReconciler) updateYARNAllocatedResource(node *corev1.No
 	if err != nil {
 		return fmt.Errorf("failed to create a two-way merge patch: %v", err)
 	}
-	klog.Infof("update node %s", node.Name)
-	return r.Client.Patch(context.TODO(), newNode, client.RawPatch(types.StrategicMergePatchType, patchBytes))
+	klog.V(4).Infof("update node %s with yarn allocated cpu: %v, memory: %v, patch %v", node.Name, vcores, memoryMB, string(patchBytes))
+	return r.Client.Patch(context.TODO(), node, client.RawPatch(types.StrategicMergePatchType, patchBytes))
 }
 
 func Add(mgr ctrl.Manager) error {
@@ -226,7 +227,7 @@ func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*cache.Yarn
 
 	podAnnoNodeId, exists := nmPod.Annotations[YarnNodeIdAnnotation]
 	if !exists {
-		return nil, fmt.Errorf("yarn nm id %v not exist in node annotationv", YarnNodeIdAnnotation)
+		return nil, fmt.Errorf("yarn nm id %v not exist in node annotation", YarnNodeIdAnnotation)
 	}
 	tokens := strings.Split(podAnnoNodeId, ":")
 	if len(tokens) != 2 {
@@ -243,6 +244,8 @@ func (r *YARNResourceSyncReconciler) getYARNNode(node *corev1.Node) (*cache.Yarn
 	}
 	if clusterID, exist := nmPod.Annotations[PodYarnClusterIDAnnotationKey]; exist {
 		yarnNode.ClusterID = clusterID
+	} else {
+		yarnNode.ClusterID = yarnclient.DefaultClusterID
 	}
 	return yarnNode, nil
 }
