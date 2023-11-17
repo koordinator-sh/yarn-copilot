@@ -20,9 +20,9 @@ import (
 	"log"
 	"os"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
-	yarnconf "github.com/koordinator-sh/goyarn/pkg/yarn/config"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	yarnclient "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
+	yarnconf "github.com/koordinator-sh/yarn-copilot/pkg/yarn/config"
 )
 
 func main() {

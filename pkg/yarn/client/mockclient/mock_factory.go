@@ -25,7 +25,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	client "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	client "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
 )
 
 // MockYarnClientFactory is a mock of YarnClientFactory interface.

@@ -23,7 +23,7 @@ import (
 
 	"k8s.io/klog/v2"
 
-	hadoop_common "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
+	hadoop_common "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
 )
 
 /** a (very) basic UserGroupInformation implementation for storing user data/tokens,

@@ -18,7 +18,7 @@ set -o errexit
 set -o nounset
 set -o pipefail
 
-GOYARN_PKG_ROOT="github.com/koordinator-sh/goyarn"
+GOYARN_PKG_ROOT="github.com/koordinator-sh/yarn-copilot"
 GOYARN_ROOT=$(dirname "${BASH_SOURCE[0]}")/..
 GOYARN_API_PATH="${GOYARN_ROOT}/pkg/yarn/apis/proto"
 YARN_API_FILES="$( find ${GOYARN_API_PATH} -name "*.proto" )"
@@ -57,7 +57,7 @@ function generate_code() {
 
 
 # input: resourcemanager_administration_protocol.proto or server/yarn_server_resourcemanager_service_protos.proto
-# output: (yarn_server_resourcemanager_service_protos.proto:koordinator-sh/goyarn/apis/proto/hadoopyarn/server)
+# output: (yarn_server_resourcemanager_service_protos.proto:koordinator-sh/yarn-copilot/apis/proto/hadoopyarn/server)
 function generate_import_files_pkg_map() {
   input_file_name=${1}
   file_name="$( echo "${input_file_name}" | grep -Eo "[a-z,_,A-Z]*.proto$" )" # resourcemanager_administration_protocol.proto

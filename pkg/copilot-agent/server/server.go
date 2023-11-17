@@ -30,7 +30,7 @@ import (
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/klog/v2"
 
-	"github.com/koordinator-sh/goyarn/pkg/copilot-agent/nm"
+	"github.com/koordinator-sh/yarn-copilot/pkg/copilot-agent/nm"
 )
 
 type YarnCopilotServer struct {

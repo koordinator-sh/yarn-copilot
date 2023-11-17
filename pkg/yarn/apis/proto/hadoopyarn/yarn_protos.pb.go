@@ -32,7 +32,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopcommon"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/runtime/protoimpl"
 )

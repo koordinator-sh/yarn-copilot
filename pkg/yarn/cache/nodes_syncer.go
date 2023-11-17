@@ -24,8 +24,8 @@ import (
 
 	"k8s.io/klog/v2"
 
-	"github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	yarnclient "github.com/koordinator-sh/goyarn/pkg/yarn/client"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn"
+	yarnclient "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
 )
 
 const (

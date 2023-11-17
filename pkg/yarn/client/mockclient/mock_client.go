@@ -25,8 +25,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	hadoopyarn "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn"
-	server "github.com/koordinator-sh/goyarn/pkg/yarn/apis/proto/hadoopyarn/server"
+	hadoopyarn "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn"
+	server "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn/server"
 )
 
 // MockYarnClient is a mock of YarnClient interface.
