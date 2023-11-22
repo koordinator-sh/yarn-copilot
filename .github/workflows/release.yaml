@@ -56,28 +56,3 @@ jobs:
             ${{ env.ALIYUN_HZ_REG }}/${{ github.repository_owner }}/${{ matrix.target }}:${{ github.ref_name }}
           cache-from: type=gha,scope=build-${{ matrix.target }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.target }}
-  goreleaser:
-    runs-on: ubuntu-latest
-    env:
-      ALIYUN_BJ_REG: registry.cn-beijing.aliyuncs.com
-      ALIYUN_HZ_REG: registry.cn-hangzhou.aliyuncs.com
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Fetch all tags
-        run: git fetch --force --tags
-      - name: Set up Go
-        uses: actions/setup-go@v4
-        with:
-          cache: false
-          go-version-file: go.mod
-      - name: Run GoReleaser
-        uses: goreleaser/goreleaser-action@v5
-        with:
-          distribution: goreleaser
-          version: latest
-          args: release --rm-dist
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
