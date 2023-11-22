@@ -16,13 +16,13 @@ English | [简体中文](./README-zh_CN.md)
 ## Introduction
 
 Koordinator has supported hybrid orchestration workloads on Kubernetes, so that batch jobs can use the requested but unused resource
-as `koord-batch` priority and `BE` QoS class to improve the cluster utilization. However, there still lots of applications
+as `koord-batch` priority and `BE` QoS class to improve the cluster utilization. However, there are still lots of applications
 running beyond K8s such as Apache Haddop YARN. As a resource management platform in BigData ecosystem, YARN has supported
 numbers of computing engines including MapReduce, Spark, Flink, Presto, etc.
 
 In order to extend the co-location scenario of Koordinator, now the community has provided Hadoop YARN extended suits
 `Koordinator YARN Copilot` in BigData ecosystem, supporting running Hadoop YARN jobs by `koord-batch` resources with 
-other K8s pods. The `Koordinator YARN Copilot` has following characters:
+other K8s pods. The `Koordinator YARN Copilot` has following characteristics:
 
 - Open-Source native: implement against open-sourced version of Hadoop YARN; so there is no hack inside YARN modules.
 - Unifed resource priority and QoS strategy: the suits aims to the `koord-batch` priority of Koordinator, and also managed by QoS strategies of koordlet.
