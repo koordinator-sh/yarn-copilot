@@ -197,7 +197,7 @@ func setupConnection(c *Client) (*connection, error) {
 		klog.V(4).Infof("error: %v", err)
 		return nil, err
 	} else {
-		klog.V(5).Infof("Successfully connected %v", c)
+		klog.V(5).Infof("setup connection success %v", c)
 	}
 
 	tcpConn, ok := conn.(*net.TCPConn)
