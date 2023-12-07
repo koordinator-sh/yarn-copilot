@@ -20,6 +20,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/klog/v2"
@@ -35,6 +36,7 @@ const (
 // YARN RM only supports get all nodes from cluster, sync to cache for efficiency
 type NodesSyncer struct {
 	yarnClients map[string]yarnclient.YarnClient
+	started     atomic.Bool
 
 	// <ClusterID, <NodeID, NodeInfo>>
 	cache map[string]map[string]*hadoopyarn.NodeReportProto
@@ -77,6 +79,8 @@ func (r *NodesSyncer) Start(ctx context.Context) error {
 			case <-t.C:
 				if err := r.syncYARNNodeAllocatedResource(); err != nil {
 					klog.Errorf("sync yarn node allocated resource failed, error: %v", err)
+				} else {
+					r.started.Store(true)
 				}
 			case <-debug.C:
 				r.debug()
@@ -87,6 +91,10 @@ func (r *NodesSyncer) Start(ctx context.Context) error {
 		}
 	}()
 	return nil
+}
+
+func (r *NodesSyncer) Started() bool {
+	return r.started.Load()
 }
 
 func (r *NodesSyncer) debug() {
@@ -124,6 +132,9 @@ func (r *NodesSyncer) syncYARNNodeAllocatedResource() error {
 		if err != nil {
 			initErr := yarnClient.Reinitialize()
 			return fmt.Errorf("GetClusterNodes error %v, reinitialize error %v", err, initErr)
+		}
+		if nodes == nil {
+			continue
 		}
 		clusterCache := map[string]*hadoopyarn.NodeReportProto{}
 		for _, reportProto := range nodes.GetNodeReports() {
