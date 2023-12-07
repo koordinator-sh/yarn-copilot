@@ -24,10 +24,10 @@ import (
 	"strings"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	"k8s.io/apimachinery/pkg/util/json"
 	"k8s.io/apimachinery/pkg/util/strategicpatch"
-	"k8s.io/cri-api/pkg/errors"
 	"k8s.io/klog/v2"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -96,10 +96,7 @@ func (r *YARNResourceSyncReconciler) Reconcile(ctx context.Context, req reconcil
 	klog.V(4).Infof("update batch resource to yarn node %+v finish, cpu-core %v, memory-mb %v, k8s node name: %s",
 		yarnNode, vcores, memoryMB, node.Name)
 
-	core, mb, err := r.getYARNNodeAllocatedResource(yarnNode)
-	if err != nil {
-		return reconcile.Result{Requeue: true}, err
-	}
+	core, mb := r.getYARNNodeAllocatedResource(yarnNode)
 	if err := r.updateYARNAllocatedResource(node, core, mb); err != nil {
 		klog.Warningf("failed to update yarn allocated resource for node %v, error %v", node.Name, err)
 		return reconcile.Result{Requeue: true}, err
@@ -144,6 +141,9 @@ func (r *YARNResourceSyncReconciler) updateYARNAllocatedResource(node *corev1.No
 		return nil
 	}
 	newNode := node.DeepCopy()
+	if newNode.Annotations == nil {
+		newNode.Annotations = map[string]string{}
+	}
 	if err := SetYARNAllocatedResource(newNode.Annotations, vcores, memoryMB); err != nil {
 		return err
 	}
@@ -316,13 +316,13 @@ func (r *YARNResourceSyncReconciler) getYARNClient(yarnNode *cache.YarnNode) (ya
 	return clusterClient, nil
 }
 
-func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *cache.YarnNode) (vcores int32, memoryMB int64, err error) {
+func (r *YARNResourceSyncReconciler) getYARNNodeAllocatedResource(yarnNode *cache.YarnNode) (vcores int32, memoryMB int64) {
 	if yarnNode == nil {
-		return 0, 0, nil
+		return 0, 0
 	}
 	nodeResource, exist := r.yarnNodeCache.GetNodeResource(yarnNode)
 	if !exist {
-		return 0, 0, nil
+		return 0, 0
 	}
 	if nodeResource.Used.VirtualCores != nil {
 		vcores = *nodeResource.Used.VirtualCores

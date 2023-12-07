@@ -19,19 +19,24 @@ package noderesource
 import (
 	"context"
 	"fmt"
-	"github.com/golang/mock/gomock"
 	"reflect"
 	"testing"
+	"time"
 
+	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/wait"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn"
 	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/cache"
 	yarnclient "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client"
 	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/client/mockclient"
@@ -186,6 +191,23 @@ func Test_getNodeBatchResource(t *testing.T) {
 			},
 			wantErr: false,
 		},
+		{
+			name: "return zero with empty origin allocatable",
+			args: args{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Annotations: map[string]string{},
+					},
+					Status: corev1.NodeStatus{
+						Allocatable: map[corev1.ResourceName]resource.Quantity{},
+					},
+				},
+				originAllocatable: corev1.ResourceList{},
+			},
+			wantBatchCPU:    *resource.NewQuantity(0, resource.DecimalSI),
+			wantBatchMemory: *resource.NewQuantity(0, resource.BinarySI),
+			wantErr:         false,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -320,6 +342,53 @@ func TestYARNResourceSyncReconciler_getYARNNodeManagerPod(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "get first node manager pod",
+			args: args{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-node",
+					},
+				},
+				pods: []*corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-nm-pod",
+							Labels: map[string]string{
+								YarnNMComponentLabel: YarnNMComponentValue,
+							},
+						},
+						Spec: corev1.PodSpec{
+							NodeName: "test-node",
+						},
+					},
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-nm-pod2",
+							Labels: map[string]string{
+								YarnNMComponentLabel: YarnNMComponentValue,
+							},
+						},
+						Spec: corev1.PodSpec{
+							NodeName: "test-node",
+						},
+					},
+				},
+			},
+			want: &corev1.Pod{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "test-nm-pod",
+					Labels: map[string]string{
+						YarnNMComponentLabel: YarnNMComponentValue,
+					},
+					ResourceVersion: "1",
+				},
+				Spec: corev1.PodSpec{
+					NodeName: "test-node",
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "node manager node found because of node label",
 			args: args{
 				node: &corev1.Node{
@@ -380,6 +449,19 @@ func TestYARNResourceSyncReconciler_getYARNNode1(t *testing.T) {
 			args: args{
 				node: nil,
 				pods: nil,
+			},
+			want:    nil,
+			wantErr: false,
+		},
+		{
+			name: "get empty node list",
+			args: args{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-node",
+					},
+				},
+				pods: []*corev1.Pod{},
 			},
 			want:    nil,
 			wantErr: false,
@@ -664,7 +746,7 @@ func TestYARNResourceSyncReconciler_getYARNClient(t *testing.T) {
 			}
 			for clusterID, client := range tt.fields.yarnClientsFromFactory {
 				createError := tt.args.factoryCreateClusterError[clusterID]
-				mockYarnClientFactory.EXPECT().CreateYarnClientByClusterID(clusterID).Return(client, createError)
+				mockYarnClientFactory.EXPECT().CreateYarnClientByClusterID(clusterID).Return(client, createError).AnyTimes()
 			}
 			r := &YARNResourceSyncReconciler{
 				yarnClient:  tt.fields.yarnClientOfReconciler,
@@ -772,36 +854,75 @@ func TestYARNResourceSyncReconciler_getYARNNodeAllocatedResource(t *testing.T) {
 	type args struct {
 		yarnNode *cache.YarnNode
 	}
+	type fields struct {
+		yarnNodesProto *hadoopyarn.GetClusterNodesResponseProto
+	}
 	tests := []struct {
 		name         string
 		args         args
+		fields       fields
 		wantVcores   int32
 		wantMemoryMB int64
-		wantErr      bool
 	}{
 		{
 			name: "nil node return nothing",
 			args: args{
+				yarnNode: nil,
+			},
+			wantVcores:   0,
+			wantMemoryMB: 0,
+		},
+		{
+			name: "nil node resource return nothing",
+			args: args{
 				yarnNode: &cache.YarnNode{
-					Name: "test-yarn-node",
-					Port: 8041,
+					Name:      "test-yarn-node",
+					Port:      8041,
+					ClusterID: yarnclient.DefaultClusterID,
 				},
 			},
 			wantVcores:   0,
 			wantMemoryMB: 0,
-			wantErr:      false,
 		},
 		{
 			name: "get yarn node not exist",
 			args: args{
 				yarnNode: &cache.YarnNode{
-					Name: "test-yarn-node",
-					Port: 8041,
+					Name:      "test-yarn-node",
+					Port:      8041,
+					ClusterID: yarnclient.DefaultClusterID,
 				},
 			},
 			wantVcores:   0,
 			wantMemoryMB: 0,
-			wantErr:      false,
+		},
+		{
+			name: "get yarn node resource",
+			args: args{
+				yarnNode: &cache.YarnNode{
+					Name:      "test-yarn-node",
+					Port:      8041,
+					ClusterID: yarnclient.DefaultClusterID,
+				},
+			},
+			fields: fields{
+				yarnNodesProto: &hadoopyarn.GetClusterNodesResponseProto{
+					NodeReports: []*hadoopyarn.NodeReportProto{
+						{
+							NodeId: &hadoopyarn.NodeIdProto{
+								Host: pointer.String("test-yarn-node"),
+								Port: pointer.Int32(8041),
+							},
+							Used: &hadoopyarn.ResourceProto{
+								Memory:       pointer.Int64(1024),
+								VirtualCores: pointer.Int32(10),
+							},
+						},
+					},
+				},
+			},
+			wantVcores:   10,
+			wantMemoryMB: 1024,
 		},
 	}
 	for _, tt := range tests {
@@ -811,21 +932,284 @@ func TestYARNResourceSyncReconciler_getYARNNodeAllocatedResource(t *testing.T) {
 			mockYarnClientFactory := mock_client.NewMockYarnClientFactory(ctrl)
 			yarnclient.DefaultYarnClientFactory = mockYarnClientFactory
 			yarnClient := mock_client.NewMockYarnClient(ctrl)
-			yarnNodeCache := cache.NewNodesSyncer(map[string]yarnclient.YarnClient{"default": yarnClient})
+			yarnClient.EXPECT().GetClusterNodes(gomock.Any()).Return(tt.fields.yarnNodesProto, nil).AnyTimes()
+			yarnNodeCache := cache.NewNodesSyncer(map[string]yarnclient.YarnClient{yarnclient.DefaultClusterID: yarnClient})
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			assert.NoError(t, yarnNodeCache.Start(ctx))
+			assert.NoError(t, wait.PollImmediateUntil(10*time.Millisecond, func() (bool, error) {
+				return yarnNodeCache.Started(), nil
+			}, ctx.Done()))
 
 			r := &YARNResourceSyncReconciler{
 				yarnNodeCache: yarnNodeCache,
 			}
-			gotVcores, gotMemoryMB, err := r.getYARNNodeAllocatedResource(tt.args.yarnNode)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("getYARNNodeAllocatedResource() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			gotVcores, gotMemoryMB := r.getYARNNodeAllocatedResource(tt.args.yarnNode)
 			if gotVcores != tt.wantVcores {
 				t.Errorf("getYARNNodeAllocatedResource() gotVcores = %v, want %v", gotVcores, tt.wantVcores)
 			}
 			if gotMemoryMB != tt.wantMemoryMB {
 				t.Errorf("getYARNNodeAllocatedResource() gotMemoryMB = %v, want %v", gotMemoryMB, tt.wantMemoryMB)
+			}
+		})
+	}
+}
+
+func TestYARNResourceSyncReconciler_Reconcile(t *testing.T) {
+	type fields struct {
+		node           *corev1.Node
+		pods           []*corev1.Pod
+		yarnNodesProto *hadoopyarn.GetClusterNodesResponseProto
+		yarnUpdateErr  error
+	}
+	type args struct {
+		nodeName string
+	}
+	tests := []struct {
+		name              string
+		fields            fields
+		args              args
+		want              reconcile.Result
+		wantErr           bool
+		wantYARNAllocated corev1.ResourceList
+	}{
+		{
+			name: "parse origin allocated failure",
+			fields: fields{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "test-node-name",
+						Annotations: map[string]string{
+							NodeOriginExtendedAllocatableAnnotationKey: "bad-fmt",
+						},
+					},
+				},
+				pods: []*corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-nm-pod",
+							Labels: map[string]string{
+								YarnNMComponentLabel: YarnNMComponentValue,
+							},
+							Annotations: map[string]string{
+								YarnNodeIdAnnotation: "test-yarn-node:8041",
+							},
+						},
+						Spec: corev1.PodSpec{
+							NodeName: "test-node-name",
+						},
+					},
+				},
+				yarnNodesProto: &hadoopyarn.GetClusterNodesResponseProto{
+					NodeReports: []*hadoopyarn.NodeReportProto{
+						{
+							NodeId: &hadoopyarn.NodeIdProto{
+								Host: pointer.String("test-yarn-node"),
+								Port: pointer.Int32(8041),
+							},
+							Used: &hadoopyarn.ResourceProto{
+								Memory:       pointer.Int64(1024),
+								VirtualCores: pointer.Int32(10),
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				nodeName: "test-node-name",
+			},
+			want:              reconcile.Result{Requeue: true},
+			wantErr:           true,
+			wantYARNAllocated: nil,
+		},
+		{
+			name: "update to yarn rm failure",
+			fields: fields{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-node-name"},
+				},
+				pods: []*corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-nm-pod",
+							Labels: map[string]string{
+								YarnNMComponentLabel: YarnNMComponentValue,
+							},
+							Annotations: map[string]string{
+								YarnNodeIdAnnotation: "test-yarn-node:8041",
+							},
+						},
+						Spec: corev1.PodSpec{
+							NodeName: "test-node-name",
+						},
+					},
+				},
+				yarnNodesProto: &hadoopyarn.GetClusterNodesResponseProto{
+					NodeReports: []*hadoopyarn.NodeReportProto{
+						{
+							NodeId: &hadoopyarn.NodeIdProto{
+								Host: pointer.String("test-yarn-node"),
+								Port: pointer.Int32(8041),
+							},
+							Used: &hadoopyarn.ResourceProto{
+								Memory:       pointer.Int64(1024),
+								VirtualCores: pointer.Int32(10),
+							},
+						},
+					},
+				},
+				yarnUpdateErr: fmt.Errorf("update yarn failed"),
+			},
+			args: args{
+				nodeName: "test-node-name",
+			},
+			want:              reconcile.Result{Requeue: true},
+			wantErr:           true,
+			wantYARNAllocated: nil,
+		},
+		{
+			name: "update yarn allocated success",
+			fields: fields{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-node-name"},
+				},
+				pods: []*corev1.Pod{
+					{
+						ObjectMeta: metav1.ObjectMeta{
+							Name: "test-nm-pod",
+							Labels: map[string]string{
+								YarnNMComponentLabel: YarnNMComponentValue,
+							},
+							Annotations: map[string]string{
+								YarnNodeIdAnnotation: "test-yarn-node:8041",
+							},
+						},
+						Spec: corev1.PodSpec{
+							NodeName: "test-node-name",
+						},
+					},
+				},
+				yarnNodesProto: &hadoopyarn.GetClusterNodesResponseProto{
+					NodeReports: []*hadoopyarn.NodeReportProto{
+						{
+							NodeId: &hadoopyarn.NodeIdProto{
+								Host: pointer.String("test-yarn-node"),
+								Port: pointer.Int32(8041),
+							},
+							Used: &hadoopyarn.ResourceProto{
+								Memory:       pointer.Int64(1024),
+								VirtualCores: pointer.Int32(10),
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				nodeName: "test-node-name",
+			},
+			want:    reconcile.Result{},
+			wantErr: false,
+			wantYARNAllocated: corev1.ResourceList{
+				BatchCPU:    resource.MustParse("10k"),
+				BatchMemory: resource.MustParse("1Gi"),
+			},
+		},
+		{
+			name:   "return nothing since node not found",
+			fields: fields{},
+			args: args{
+				nodeName: "test-node-name",
+			},
+			want:              reconcile.Result{},
+			wantErr:           false,
+			wantYARNAllocated: nil,
+		},
+		{
+			name: "nm pod has removed from node",
+			fields: fields{
+				node: &corev1.Node{
+					ObjectMeta: metav1.ObjectMeta{Name: "test-node-name"},
+				},
+				yarnNodesProto: &hadoopyarn.GetClusterNodesResponseProto{
+					NodeReports: []*hadoopyarn.NodeReportProto{
+						{
+							NodeId: &hadoopyarn.NodeIdProto{
+								Host: pointer.String("test-yarn-node"),
+								Port: pointer.Int32(8041),
+							},
+							Used: &hadoopyarn.ResourceProto{
+								Memory:       pointer.Int64(1024),
+								VirtualCores: pointer.Int32(10),
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				nodeName: "test-node-name",
+			},
+			want:    reconcile.Result{},
+			wantErr: false,
+			wantYARNAllocated: corev1.ResourceList{
+				BatchCPU:    resource.MustParse("0"),
+				BatchMemory: resource.MustParse("0"),
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			scheme := runtime.NewScheme()
+			_ = clientgoscheme.AddToScheme(scheme)
+			client := fake.NewClientBuilder().WithScheme(scheme).Build()
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+			mockYarnClientFactory := mock_client.NewMockYarnClientFactory(ctrl)
+			yarnclient.DefaultYarnClientFactory = mockYarnClientFactory
+			yarnClient := mock_client.NewMockYarnClient(ctrl)
+			mockYarnClientFactory.EXPECT().CreateYarnClientByClusterID(yarnclient.DefaultClusterID).Return(yarnClient, nil).AnyTimes()
+			yarnClient.EXPECT().GetClusterNodes(gomock.Any()).Return(tt.fields.yarnNodesProto, nil).AnyTimes()
+			yarnClient.EXPECT().Reinitialize().Return(nil).AnyTimes()
+			yarnClient.EXPECT().UpdateNodeResource(gomock.Any()).Return(nil, tt.fields.yarnUpdateErr).AnyTimes()
+			yarnNodeCache := cache.NewNodesSyncer(map[string]yarnclient.YarnClient{yarnclient.DefaultClusterID: yarnClient})
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			assert.NoError(t, yarnNodeCache.Start(ctx))
+			assert.NoError(t, wait.PollImmediateUntil(10*time.Millisecond, func() (bool, error) {
+				return yarnNodeCache.Started(), nil
+			}, ctx.Done()))
+
+			r := &YARNResourceSyncReconciler{
+				Client:        client,
+				yarnNodeCache: yarnNodeCache,
+			}
+			if tt.fields.node != nil {
+				err := r.Client.Create(ctx, tt.fields.node)
+				assert.NoError(t, err)
+			}
+			for _, pod := range tt.fields.pods {
+				err := r.Client.Create(ctx, pod)
+				assert.NoError(t, err)
+			}
+
+			got, err := r.Reconcile(ctx, reconcile.Request{
+				NamespacedName: types.NamespacedName{
+					Name: tt.args.nodeName,
+				},
+			})
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Reconcile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			assert.Equal(t, tt.wantErr, err != nil)
+			assert.Equal(t, tt.want, got)
+			if tt.fields.node != nil {
+				node := &corev1.Node{}
+				err = r.Client.Get(ctx, types.NamespacedName{Name: tt.args.nodeName}, node)
+				assert.NoError(t, err)
+				yarnAllocatedResList, err := GetYARNAllocatedResource(node.Annotations)
+				assert.Equal(t, tt.wantYARNAllocated, yarnAllocatedResList)
+				assert.NoError(t, err)
 			}
 		})
 	}
