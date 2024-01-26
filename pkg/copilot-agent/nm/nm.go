@@ -110,6 +110,7 @@ func (n *NodeMangerOperator) syncMemoryCgroup(stop <-chan struct{}) error {
 		case <-n.ticker.C:
 			n.syncNoneProcCgroup()
 			n.syncAllCgroup()
+			_ = n.syncParentCgroup()
 		case <-n.nmTicker.C:
 			n.syncNMEndpoint()
 		case <-stop:
@@ -187,6 +188,30 @@ func (n *NodeMangerOperator) syncAllCgroup() {
 	for path := range toDelete {
 		n.removeMemoryCgroup(path)
 	}
+}
+
+func (n *NodeMangerOperator) syncParentCgroup() error {
+	containers, err := n.ListContainers()
+	if err != nil {
+		klog.Error(err)
+		return err
+	}
+	var allCpuShare int
+	for _, con := range containers.Containers.Items {
+		if con.IsFinalState() {
+			continue
+		}
+		allCpuShare += con.TotalVCoresNeeded * 1024
+	}
+	if allCpuShare > 0 {
+		cpuPath := n.GenerateCgroupFullPath(system.CgroupCPUDir)
+		_, err = system.CommonFileWriteIfDifferent(filepath.Join(cpuPath, system.CPUSharesName), strconv.Itoa(allCpuShare))
+		if err != nil {
+			klog.Errorf("fail to set cpu share for %s: %s", cpuPath, err.Error())
+			return err
+		}
+	}
+	return nil
 }
 
 func (n *NodeMangerOperator) removeMemoryCgroup(fileName string) {
