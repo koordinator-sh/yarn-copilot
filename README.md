@@ -21,12 +21,12 @@ running beyond K8s such as Apache Haddop YARN. As a resource management platform
 numbers of computing engines including MapReduce, Spark, Flink, Presto, etc.
 
 In order to extend the co-location scenario of Koordinator, now the community has provided Hadoop YARN extended suits
-`Koordinator YARN Copilot` in BigData ecosystem, supporting running Hadoop YARN jobs by `koord-batch` resources with 
+`Koordinator YARN Copilot` in BigData ecosystem, supporting running Hadoop YARN jobs by `koord-batch` resources with
 other K8s pods. The `Koordinator YARN Copilot` has following characteristics:
 
 - Open-Source native: implement against open-sourced version of Hadoop YARN; so there is no hack inside YARN modules.
 - Unifed resource priority and QoS strategy: the suits aims to the `koord-batch` priority of Koordinator, and also managed by QoS strategies of koordlet.
-- Resource sharing on node level: node resources of `koord-batch` priority can be requested by tasks of YARN or `Batch` pods both. 
+- Resource sharing on node level: node resources of `koord-batch` priority can be requested by tasks of YARN or `Batch` pods both.
 - Adaptive for multiple environments: the suits can be run under any environment, including public cloud or IDC.
 
 ## Quick Start
@@ -82,3 +82,6 @@ Koordinator is licensed under the Apache License, Version 2.0. See [LICENSE](./L
 
 [![Star History Chart](https://api.star-history.com/svg?repos=koordinator-sh/koordinator&type=Date)](https://star-history.com/#koordinator-sh/koordinator&Date)
 -->
+
+## Security
+Please report vulnerabilities by email to kubernetes-security@service.aliyun.com. Also see our [SECURITY.md](./SECURITY.md) file for details.
