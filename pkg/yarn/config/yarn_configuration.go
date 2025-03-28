@@ -28,8 +28,11 @@ var (
 )
 
 const (
-	YARN_PREFIX              = "yarn."
-	RM_PREFIX                = YARN_PREFIX + "resourcemanager."
+	// yarn-site
+	YARN_PREFIX = "yarn."
+	RM_PREFIX   = YARN_PREFIX + "resourcemanager."
+	NM_PREFIX   = YARN_PREFIX + "nodemanager."
+
 	RM_ADDRESS               = RM_PREFIX + "address"
 	RM_SCHEDULER_ADDRESS     = RM_PREFIX + "scheduler.address"
 	RM_ADMIN_ADDRESS         = RM_PREFIX + "admin.address"
@@ -37,11 +40,26 @@ const (
 	RM_HA_RM_IDS             = RM_PREFIX + "ha.rm-ids"
 	RM_AM_EXPIRY_INTERVAL_MS = YARN_PREFIX + "am.liveness-monitor.expiry-interval-ms"
 
+	RM_KEYTAB = RM_PREFIX + "keytab"
+	NM_KEYTAB = NM_PREFIX + "keytab"
+
+	RM_PRINCIPLE = RM_PREFIX + "principal"
+
 	DEFAULT_RM_ADDRESS               = "0.0.0.0:8032"
 	DEFAULT_RM_SCHEDULER_ADDRESS     = "0.0.0.0:8030"
 	DEFAULT_RM_ADMIN_ADDRESS         = "0.0.0.0:8033"
 	DEFAULT_RM_AM_EXPIRY_INTERVAL_MS = 600000
 	DEFAULT_RM_HA_ENABLED            = false
+
+	DEFAULT_RM_KEYTAB    = "/etc/krb5.keytab" // https://hadoop.apache.org/docs/r2.7.3/hadoop-yarn/hadoop-yarn-common/yarn-default.xml
+	DEFAULT_RM_PRINCIPLE = ""
+
+	// core-site
+	IPC_CLIENT_TCPNODELAY         = "ipc.client.tcpnodelay"
+	DEFAULT_IPC_CLIENT_TCPNODELAY = false
+
+	SECURITY_AUTHENTICATION = "hadoop.security.authentication"
+	DEFAULT_AUTHENTICATION  = "simple"
 )
 
 type yarn_configuration struct {
@@ -49,6 +67,7 @@ type yarn_configuration struct {
 }
 
 type YarnConfiguration interface {
+	// yarn-site
 	GetRMAddress() (string, error)
 	GetRMSchedulerAddress() (string, error)
 	GetRMAdminAddress() (string, error)
@@ -56,9 +75,15 @@ type YarnConfiguration interface {
 	GetRMs() ([]string, error)
 	GetRMAdminAddressByID(rmID string) (string, error)
 	GetRMAddressByID(rmID string) (string, error)
+	GetResourceManagerKeytab() (string, error)
+	GetResourceManagerPrincipal() (string, error)
 
 	SetRMAddress(address string) error
 	SetRMSchedulerAddress(address string) error
+
+	// core-site
+	GetIPCClientTcpNoDelay() (bool, error)
+	GetSecurityAuthentication() (string, error)
 
 	Get(key string, defaultValue string) (string, error)
 	GetInt(key string, defaultValue int) (int, error)
@@ -111,6 +136,23 @@ func (yarnConf *yarn_configuration) GetRMAddressByID(rmID string) (string, error
 	// yarn.resourcemanager.address.rm1
 	rmAddrKey := fmt.Sprintf("%v.%v", RM_ADDRESS, rmID)
 	return yarnConf.conf.Get(rmAddrKey, DEFAULT_RM_ADDRESS)
+}
+
+func (yarnConf *yarn_configuration) GetResourceManagerKeytab() (string, error) {
+	return yarnConf.conf.Get(RM_KEYTAB, DEFAULT_RM_KEYTAB)
+}
+
+func (yarnConf *yarn_configuration) GetResourceManagerPrincipal() (string, error) {
+	return yarnConf.conf.Get(RM_PRINCIPLE, DEFAULT_RM_PRINCIPLE)
+}
+
+func (yarnConf *yarn_configuration) GetIPCClientTcpNoDelay() (bool, error) {
+	// ipc.client.tcpnodelay
+	return yarnConf.conf.GetBool(IPC_CLIENT_TCPNODELAY, DEFAULT_IPC_CLIENT_TCPNODELAY)
+}
+
+func (yarnConf *yarn_configuration) GetSecurityAuthentication() (string, error) {
+	return yarnConf.conf.Get(SECURITY_AUTHENTICATION, DEFAULT_AUTHENTICATION)
 }
 
 func (yarnConf *yarn_configuration) Set(key string, value string) error {
