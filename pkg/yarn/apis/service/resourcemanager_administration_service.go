@@ -25,6 +25,7 @@ import (
 
 	gohadoop "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/auth"
 	yarnserver "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopyarn/server"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/security"
 	hadoop_ipc_client "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client/ipc"
 	yarn_conf "github.com/koordinator-sh/yarn-copilot/pkg/yarn/config"
 )
@@ -56,7 +57,7 @@ func DialResourceManagerAdministrationProtocolService(conf yarn_conf.YarnConfigu
 	if err != nil {
 		return nil, err
 	}
-	ugi, err := gohadoop.CreateSimpleUGIProto()
+	ugi, err := security.CreateUserGroupInformation(conf)
 	if err != nil {
 		return nil, err
 	}
@@ -68,6 +69,16 @@ func DialResourceManagerAdministrationProtocolService(conf yarn_conf.YarnConfigu
 		return nil, err
 	}
 
-	c := &hadoop_ipc_client.Client{ClientId: clientId, Ugi: ugi, ServerAddress: serverAddress}
+	var tcpNoDelay bool
+	if tcpNoDelay, err = conf.GetIPCClientTcpNoDelay(); err != nil {
+		return nil, err
+	}
+
+	c := &hadoop_ipc_client.Client{
+		ClientId:      clientId,
+		UGI:           ugi,
+		ServerAddress: serverAddress,
+		TCPNoDelay:    tcpNoDelay,
+	}
 	return &ResourceManagerAdministrationProtocolServiceClient{c}, nil
 }

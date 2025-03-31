@@ -50,6 +50,22 @@ const (
 	AUTH_PLAIN    AuthMethod = 0x53
 )
 
+func ConvertAuthProtoToAuthMethod(authProto *hadoop_common.RpcSaslProto_SaslAuth) AuthMethod {
+	method := authProto.GetMethod()
+	mechanism := authProto.GetMechanism()
+
+	switch {
+	case method == "TOKEN" && mechanism == "DIGEST-MD5":
+		return AUTH_TOKEN
+	case method == "KERBEROS" && mechanism == "GSSAPI":
+		return AUTH_KERBEROS
+	case method == "PLAIN":
+		return AUTH_PLAIN
+	}
+
+	return AUTH_SIMPLE
+}
+
 func (authmethod AuthMethod) String() string {
 	switch {
 	case authmethod == AUTH_SIMPLE:

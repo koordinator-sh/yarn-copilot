@@ -25,7 +25,9 @@ import (
 
 	gohadoop "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/auth"
 	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/security"
 	hadoop_ipc_client "github.com/koordinator-sh/yarn-copilot/pkg/yarn/client/ipc"
+	yarn_conf "github.com/koordinator-sh/yarn-copilot/pkg/yarn/config"
 )
 
 // Reference proto, json, and math imports to suppress error if they are not otherwise used.
@@ -47,9 +49,13 @@ func (c *HAServiceProtocolServiceClient) GetServiceStatus(in *hadoopcommon.GetSe
 	return c.Call(gohadoop.GetCalleeRPCRequestHeaderProto(&HA_SERVICE_PROTOCOL), in, out)
 }
 
-func DialHAServiceProtocolService(serverAddress string) (HAServiceProtocolService, error) {
+func DialHAServiceProtocolService(serverAddress string, conf yarn_conf.YarnConfiguration) (HAServiceProtocolService, error) {
 	clientId, _ := uuid.NewV4()
-	ugi, _ := gohadoop.CreateSimpleUGIProto()
-	c := &hadoop_ipc_client.Client{ClientId: clientId, Ugi: ugi, ServerAddress: serverAddress}
+	ugi, _ := security.CreateUserGroupInformation(conf)
+	c := &hadoop_ipc_client.Client{
+		ClientId:      clientId,
+		UGI:           ugi,
+		ServerAddress: serverAddress,
+	}
 	return &HAServiceProtocolServiceClient{c}, nil
 }

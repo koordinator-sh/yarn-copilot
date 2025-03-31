@@ -19,14 +19,15 @@ package client
 import (
 	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
 	yarnservice "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/service"
+	yarn_conf "github.com/koordinator-sh/yarn-copilot/pkg/yarn/config"
 )
 
 type YarnHAClient struct {
 	client yarnservice.HAServiceProtocolService
 }
 
-func CreateYarnHAClient(rmAddress string) (*YarnHAClient, error) {
-	c, err := yarnservice.DialHAServiceProtocolService(rmAddress)
+func CreateYarnHAClient(rmAddress string, conf yarn_conf.YarnConfiguration) (*YarnHAClient, error) {
+	c, err := yarnservice.DialHAServiceProtocolService(rmAddress, conf)
 	return &YarnHAClient{client: c}, err
 }
 

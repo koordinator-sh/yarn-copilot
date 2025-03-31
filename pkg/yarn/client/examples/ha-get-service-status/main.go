@@ -44,7 +44,7 @@ func main() {
 		}
 
 		// Create YarnAdminClient
-		yarnHAClient, _ := yarnclient.CreateYarnHAClient(rmAddr)
+		yarnHAClient, _ := yarnclient.CreateYarnHAClient(rmAddr, conf)
 
 		request := &hadoopcommon.GetServiceStatusRequestProto{}
 		response, err := yarnHAClient.GetServiceStatus(request)
