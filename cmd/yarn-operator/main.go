@@ -20,6 +20,7 @@ import (
 	"flag"
 	"math/rand"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"time"
 
