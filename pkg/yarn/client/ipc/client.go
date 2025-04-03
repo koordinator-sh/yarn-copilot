@@ -226,6 +226,7 @@ func setupConnection(c *Client) (*connection, error) {
 	// close the connection if we fail to setup the connection
 	defer func() {
 		if err != nil {
+			// nolint:errcheck
 			conn.Close()
 		}
 	}()
@@ -253,6 +254,7 @@ func setupConnection(c *Client) (*connection, error) {
 		if fd, err = tcpConn.File(); err != nil {
 			return nil, err
 		}
+		// nolint:errcheck
 		defer fd.Close()
 
 		/*
@@ -336,7 +338,7 @@ func saslConnect(client *Client, con *connection) (*yarnauth.AuthMethod, error) 
 			if saslClient == nil {
 				authMethod = yarnauth.AUTH_SIMPLE
 			} else {
-				// ignore error
+				// nolint:errcheck
 				saslClient.EvaluateChallenge(challengeToken)
 			}
 			done = true

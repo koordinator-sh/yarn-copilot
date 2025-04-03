@@ -120,6 +120,7 @@ func NewConfigurationResources(hadoopConfDir string, resources []Resource, prefi
 			klog.Warningf("Couldn't read resource: ", err)
 			return nil, err
 		}
+		// nolint:errcheck
 		defer conf.Close()
 
 		// Parse

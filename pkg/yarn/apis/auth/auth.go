@@ -67,14 +67,14 @@ func ConvertAuthProtoToAuthMethod(authProto *hadoop_common.RpcSaslProto_SaslAuth
 }
 
 func (authmethod AuthMethod) String() string {
-	switch {
-	case authmethod == AUTH_SIMPLE:
+	switch authmethod {
+	case AUTH_SIMPLE:
 		return "SIMPLE"
-	case authmethod == AUTH_KERBEROS:
+	case AUTH_KERBEROS:
 		return "GSSAPI"
-	case authmethod == AUTH_TOKEN:
+	case AUTH_TOKEN:
 		return "DIGEST-MD5"
-	case authmethod == AUTH_PLAIN:
+	case AUTH_PLAIN:
 		return "PLAIN"
 	}
 	return "ERROR-UNKNOWN"
@@ -88,10 +88,10 @@ const (
 )
 
 func (authprotocol AuthProtocol) String() string {
-	switch {
-	case authprotocol == AUTH_PROTOCOL_NONE:
+	switch authprotocol {
+	case AUTH_PROTOCOL_NONE:
 		return "NONE"
-	case authprotocol == AUTH_PROTOCOL_SASL:
+	case AUTH_PROTOCOL_SASL:
 		return "SASL"
 	}
 	return "ERROR-UNKNOWN"
