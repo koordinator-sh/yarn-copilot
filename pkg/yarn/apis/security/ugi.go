@@ -23,17 +23,60 @@ import (
 
 	"k8s.io/klog/v2"
 
+	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/auth"
 	hadoop_common "github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
+	yarn_conf "github.com/koordinator-sh/yarn-copilot/pkg/yarn/config"
 )
 
-/** a (very) basic UserGroupInformation implementation for storing user data/tokens,
-  This implementation is currently *not* thread-safe
+/*
+a (very) basic UserGroupInformation implementation for storing user data/tokens,
+This implementation is currently *not* thread-safe
 */
-
 type UserGroupInformation struct {
+	conf yarn_conf.YarnConfiguration
+
 	// rwMutex    sync.RWMutex
 	userInfo   *hadoop_common.UserInformationProto
 	userTokens map[string]*hadoop_common.TokenProto
+
+	authentication string
+	keytabFilePath string
+	principal      string
+}
+
+func (ugi *UserGroupInformation) GetAuthentication() string {
+	return ugi.authentication
+}
+
+func (ugi *UserGroupInformation) GetKeytabFilePath() string {
+	return ugi.keytabFilePath
+}
+
+func (ugi *UserGroupInformation) GetPrincipal() string {
+	return ugi.principal
+}
+
+func (ugi *UserGroupInformation) GetEffectiveUser() string {
+	return ugi.userInfo.GetEffectiveUser()
+}
+
+func (ugi *UserGroupInformation) GetRealUser() string {
+	return ugi.userInfo.GetRealUser()
+}
+
+func (ugi *UserGroupInformation) GetUserInfoProto() *hadoop_common.UserInformationProto {
+	if ugi.userInfo == nil {
+		klog.Warningf("UserGroupInformation is nil")
+		return nil
+	}
+
+	return ugi.userInfo
+}
+
+func (ugi *UserGroupInformation) IsSecurityEnabled() bool {
+	// In order to turn on RPC authentication in hadoop, set the value of hadoop.security.authentication property to "kerberos"
+	// https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/SecureMode.html
+	return ugi.authentication != "simple"
 }
 
 var once sync.Once
@@ -51,6 +94,47 @@ func CreateCurrentUserInfoProto() (*hadoop_common.UserInformationProto, error) {
 	}
 
 	return &hadoop_common.UserInformationProto{EffectiveUser: nil, RealUser: &username}, nil
+}
+
+func CreateUserGroupInformation(conf yarn_conf.YarnConfiguration) (*UserGroupInformation, error) {
+	ugi := &UserGroupInformation{
+		conf: conf,
+	}
+
+	authentication, err := conf.GetSecurityAuthentication()
+	if err != nil {
+		return nil, err
+	}
+	ugi.authentication = authentication
+
+	if ugi.authentication == "kerberos" {
+		// TODO: get the user name from the configuration
+		ugiProto, err := auth.CreateSimpleUGIProto()
+		if err != nil {
+			return nil, err
+		}
+		ugi.userInfo = ugiProto
+
+		keytabFilePath, err := conf.GetResourceManagerKeytab()
+		if err != nil {
+			return nil, err
+		}
+		ugi.keytabFilePath = keytabFilePath
+
+		principal, err := conf.GetResourceManagerPrincipal()
+		if err != nil {
+			return nil, err
+		}
+		ugi.principal = principal
+	} else {
+		ugiProto, err := auth.CreateSimpleUGIProto()
+		if err != nil {
+			return nil, err
+		}
+		ugi.userInfo = ugiProto
+	}
+
+	return ugi, nil
 }
 
 func Allocate(userInfo *hadoop_common.UserInformationProto, userTokens map[string]*hadoop_common.TokenProto) *UserGroupInformation {

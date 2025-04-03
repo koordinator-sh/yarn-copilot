@@ -18,6 +18,7 @@ package client
 
 import (
 	"fmt"
+
 	"k8s.io/klog/v2"
 
 	"github.com/koordinator-sh/yarn-copilot/pkg/yarn/apis/proto/hadoopcommon"
@@ -43,6 +44,8 @@ type yarnClient struct {
 	activeRMAdminAddress *string
 	activeRMAddress      *string
 	clusterID            string
+
+	applicationClient *YarnApplicationClient
 }
 
 func NewYarnClient(confDir string, clusterID string) YarnClient {
@@ -101,9 +104,14 @@ func (c *yarnClient) Initialize() error {
 func (c *yarnClient) Close() {
 	c.activeRMAdminAddress = nil
 	c.activeRMAddress = nil
+
+	// reset application client
+	c.applicationClient = nil
 }
 
 func (c *yarnClient) Reinitialize() error {
+	klog.V(5).Info("Reinitialize yarn client")
+
 	c.Close()
 	return c.Initialize()
 }
@@ -138,7 +146,7 @@ func (c *yarnClient) GetActiveRMID() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		haClient, err := CreateYarnHAClient(rmAdminAddr)
+		haClient, err := CreateYarnHAClient(rmAdminAddr, c.conf)
 		if err != nil {
 			return "", fmt.Errorf("create yarn %v ha client for %v failed %v", rmID, rmAdminAddr, err)
 		}
@@ -164,10 +172,18 @@ func (c *yarnClient) updateNodeResource(request *yarnserver.UpdateNodeResourceRe
 }
 
 func (c *yarnClient) getClusterNodes(request *hadoopyarn.GetClusterNodesRequestProto) (*hadoopyarn.GetClusterNodesResponseProto, error) {
-	// TODO keep client alive instead of create every time
-	applicationClient, err := CreateYarnApplicationClient(c.conf, c.activeRMAddress)
-	if err != nil {
-		return nil, err
+	// reuse application client
+	if c.applicationClient == nil {
+		cl, err := CreateYarnApplicationClient(c.conf, c.activeRMAddress)
+		if err != nil {
+			return nil, err
+		}
+
+		c.applicationClient = cl
 	}
-	return applicationClient.GetClusterNode(request)
+
+	if c.applicationClient == nil {
+		return nil, fmt.Errorf("null application client")
+	}
+	return c.applicationClient.GetClusterNode(request)
 }

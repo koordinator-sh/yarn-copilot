@@ -24,7 +24,10 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	gouuid "github.com/nu7hatch/gouuid"
@@ -42,11 +45,20 @@ const (
 	rwDefaultTimeout   = 5 * time.Second
 )
 
+var (
+	saslNegotiateState   = hadoop_common.RpcSaslProto_NEGOTIATE
+	saslNegotiateMessage = hadoop_common.RpcSaslProto{
+		State: &saslNegotiateState,
+	}
+)
+
 type Client struct {
 	ClientId      *gouuid.UUID
-	Ugi           *hadoop_common.UserInformationProto
+	UGI           *security.UserGroupInformation
 	ServerAddress string
+
 	TCPNoDelay    bool
+	TCPLowLatency bool
 }
 
 type connection struct {
@@ -54,7 +66,6 @@ type connection struct {
 }
 
 type connection_id struct {
-	user     string
 	protocol string
 	address  string
 	ClientId gouuid.UUID
@@ -81,12 +92,16 @@ var (
 	SASL_RPC_DUMMY_CLIENT_ID     []byte = make([]byte, 0)
 	SASL_RPC_CALL_ID             int32  = -33
 	SASL_RPC_INVALID_RETRY_COUNT int32  = -1
+
+	AUTHORIZATION_FAILED_CALL_ID int32 = -1
+	INVALID_CALL_ID              int32 = -2
+	CONNECTION_CONTEXT_CALL_ID   int32 = -3
+	PING_CALL_ID                 int32 = -4
 )
 
 func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Message, rpcResponse proto.Message) error {
 	// Create connection_id
 	connectionId := connection_id{
-		user:     *c.Ugi.RealUser,
 		protocol: *rpc.DeclaringClassProtocolName,
 		address:  c.ServerAddress,
 		ClientId: *c.ClientId,
@@ -103,23 +118,20 @@ func (c *Client) Call(rpc *hadoop_common.RequestHeaderProto, rpcRequest proto.Me
 	rpcCall := call{callId: 0, procedure: rpc, request: rpcRequest, response: rpcResponse}
 	err = sendRequest(c, conn, &rpcCall)
 	if err != nil {
-		klog.Warningf("sendRequest", err)
+		klog.Errorf("sendRequest error: %v", err)
 		return err
 	}
 
 	// Read & return response
 	err = c.readResponse(conn, &rpcCall)
 
-	// TODO keep connection alive for reuse
-	conn.con.Close()
-
 	return err
 }
 
-//var connectionPool = struct {
-//	sync.RWMutex
-//	connections map[connection_id]*connection
-//}{connections: make(map[connection_id]*connection)}
+var connectionPool = struct {
+	sync.RWMutex
+	connections map[connection_id]*connection
+}{connections: make(map[connection_id]*connection)}
 
 func findUsableTokenForService(service string) (*hadoop_common.TokenProto, bool) {
 	userTokens := security.GetCurrentUser().GetUserTokens()
@@ -138,56 +150,69 @@ func findUsableTokenForService(service string) (*hadoop_common.TokenProto, bool)
 	return nil, false
 }
 
-func getConnection(c *Client, connectionId *connection_id) (*connection, error) {
-	// Try to re-use an existing connection
-	//connectionPool.RLock()
-	//con := connectionPool.connections[*connectionId]
-	//connectionPool.RUnlock()
+func getAuthProtocol(c *Client) yarnauth.AuthProtocol {
+	authProtocol := yarnauth.AUTH_PROTOCOL_NONE
 
-	// If necessary, create a new connection and save it in the connection-pool
-	//var err error
-	//if con == nil {
-	con, err := setupConnection(c)
-	if err != nil {
-		klog.Warningf("Couldn't setup connection: %v", err)
-		return nil, err
-	}
-
-	//connectionPool.Lock()
-	//connectionPool.connections[*connectionId] = con
-	//connectionPool.Unlock()
-
-	var authProtocol yarnauth.AuthProtocol = yarnauth.AUTH_PROTOCOL_NONE
-
+	// TODO: check if we have a token for the service
 	if _, found := findUsableTokenForService(c.ServerAddress); found {
 		klog.V(4).Infof("found token for service: %s", c.ServerAddress)
 		authProtocol = yarnauth.AUTH_PROTOCOL_SASL
 	}
 
-	err = writeConnectionHeader(con, authProtocol)
+	if c.UGI.IsSecurityEnabled() {
+		authProtocol = yarnauth.AUTH_PROTOCOL_SASL
+	}
+
+	return authProtocol
+}
+
+func getConnection(c *Client, connectionId *connection_id) (conn *connection, err error) {
+	// Try to re-use an existing connection
+	connectionPool.RLock()
+	conn = connectionPool.connections[*connectionId]
+	connectionPool.RUnlock()
+
+	if conn != nil {
+		return conn, nil
+	}
+
+	// If necessary, create a new connection and save it in the connection-pool
+	conn, err = setupConnection(c)
 	if err != nil {
+		klog.Errorf("couldn't setup connection: %v", err)
 		return nil, err
 	}
 
-	if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
-		klog.V(4).Infof("attempting SASL negotiation.")
+	connectionPool.Lock()
+	connectionPool.connections[*connectionId] = conn
+	connectionPool.Unlock()
 
-		if err = negotiateSimpleTokenAuth(c, con); err != nil {
-			klog.Warningf("failed to complete SASL negotiation!")
+	authProtocol := getAuthProtocol(c)
+	err = writeConnectionHeader(conn, authProtocol)
+	if err != nil {
+		return nil, err
+	}
+	var authMethod yarnauth.AuthMethod
+	if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
+		authMethod, err = setupSaslConnection(c, conn)
+		if err != nil {
+			klog.Errorf("couldn't setup sasl connection: %v", err)
 			return nil, err
 		}
-
-	} else {
-		klog.V(5).Infof("no usable tokens. proceeding without auth.")
+		klog.V(5).Infof("proceeding with sasl. auth method: %v", authMethod)
 	}
 
-	err = writeConnectionContext(c, con, connectionId, authProtocol)
+	err = writeConnectionContext(c, conn, connectionId, authMethod)
 	if err != nil {
 		return nil, err
 	}
-	//}
 
-	return con, nil
+	return conn, nil
+}
+
+func setupSaslConnection(c *Client, con *connection) (yarnauth.AuthMethod, error) {
+	authMethod, err := saslConnect(c, con)
+	return *authMethod, err
 }
 
 func setupConnection(c *Client) (*connection, error) {
@@ -196,9 +221,15 @@ func setupConnection(c *Client) (*connection, error) {
 	if err != nil {
 		klog.V(4).Infof("error: %v", err)
 		return nil, err
-	} else {
-		klog.V(5).Infof("setup connection success %v", c)
 	}
+
+	// close the connection if we fail to setup the connection
+	defer func() {
+		if err != nil {
+			// nolint:errcheck
+			conn.Close()
+		}
+	}()
 
 	tcpConn, ok := conn.(*net.TCPConn)
 	if !ok {
@@ -213,7 +244,115 @@ func setupConnection(c *Client) (*connection, error) {
 		return nil, err
 	}
 
+	err = tcpConn.SetKeepAlive(true)
+	if err != nil {
+		return nil, err
+	}
+
+	if c.TCPLowLatency {
+		var fd *os.File
+		if fd, err = tcpConn.File(); err != nil {
+			return nil, err
+		}
+		// nolint:errcheck
+		defer fd.Close()
+
+		/*
+			This allows intermediate switches to shape IPC traffic
+			differently from Shuffle/HDFS DataStreamer traffic.
+			IPTOS_RELIABILITY (0x04) | IPTOS_LOWDELAY (0x10)
+			Prefer to optimize connect() speed & response latency over net
+			throughput.
+		*/
+		sockFd := int(fd.Fd())
+		if err = syscall.SetsockoptInt(sockFd, syscall.IPPROTO_IP, syscall.IP_TOS, 0x14); err != nil {
+			return nil, err
+		}
+		// TODO socket.setPerformancePreferences(1, 2, 0)
+	}
+
 	return &connection{tcpConn}, nil
+}
+
+func saslConnect(client *Client, con *connection) (*yarnauth.AuthMethod, error) {
+	authMethod := yarnauth.AUTH_SIMPLE
+
+	// send a SASL negotiation request
+	if err := sendSaslMessage(con, &saslNegotiateMessage); err != nil {
+		klog.Warningf("failed to send SASL NEGOTIATE message!")
+		return nil, err
+	}
+
+	var saslClient SASLClient
+	done := false
+	for !done {
+		saslResponseMessage, err := receiveSaslMessage(con)
+		if err != nil {
+			klog.Error("failed to receive SASL NEGOTIATE response!")
+			return nil, err
+		}
+
+		challengeToken := saslResponseMessage.GetToken()
+		var rpcResponse *hadoop_common.RpcSaslProto
+
+		switch saslResponseMessage.GetState() {
+		case hadoop_common.RpcSaslProto_NEGOTIATE:
+			auth, client, err := selectSaslClient(client, saslResponseMessage.GetAuths())
+			if err != nil {
+				klog.Error("failed to select SASL client!")
+				return nil, err
+			}
+			saslClient = client
+			authMethod = yarnauth.ConvertAuthProtoToAuthMethod(auth)
+
+			var responseToken []byte
+			if authMethod == yarnauth.AUTH_SIMPLE {
+				done = true
+			} else {
+				if auth.GetChallenge() != nil {
+					challengeToken = auth.GetChallenge()
+					// TODO clean auth challenge
+				} else {
+					// TODO check saslClient.hasInitialResponse
+					challengeToken = []byte{}
+				}
+				responseToken, err = saslClient.EvaluateChallenge(challengeToken)
+				if err != nil {
+					klog.Error("failed to evaluate challenge!")
+					return nil, err
+				}
+			}
+			rpcResponse = createSaslReply(hadoop_common.RpcSaslProto_INITIATE, responseToken)
+			rpcResponse.Auths = append(rpcResponse.Auths, auth)
+		case hadoop_common.RpcSaslProto_CHALLENGE:
+			if saslClient == nil {
+				return nil, errors.New("sasl client is nil")
+			}
+			responseToken, err := saslClient.EvaluateChallenge(challengeToken)
+			if err != nil {
+				klog.Error("failed to evaluate challenge!")
+				return nil, err
+			}
+			rpcResponse = createSaslReply(hadoop_common.RpcSaslProto_RESPONSE, responseToken)
+		case hadoop_common.RpcSaslProto_SUCCESS:
+			if saslClient == nil {
+				authMethod = yarnauth.AUTH_SIMPLE
+			} else {
+				// nolint:errcheck
+				saslClient.EvaluateChallenge(challengeToken)
+			}
+			done = true
+		}
+
+		if rpcResponse != nil {
+			if err = sendSaslMessage(con, rpcResponse); err != nil {
+				klog.Error("failed to send SASL message!")
+				return nil, err
+			}
+		}
+	}
+
+	return &authMethod, nil
 }
 
 func writeConnectionHeader(conn *connection, authProtocol yarnauth.AuthProtocol) error {
@@ -253,23 +392,45 @@ func writeConnectionHeader(conn *connection, authProtocol yarnauth.AuthProtocol)
 	return nil
 }
 
-func writeConnectionContext(c *Client, conn *connection, connectionId *connection_id, authProtocol yarnauth.AuthProtocol) error {
+func writeConnectionContext(c *Client, conn *connection, connectionId *connection_id, authMethod yarnauth.AuthMethod) error {
 	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
 		return err
 	}
-	// Create hadoop_common.IpcConnectionContextProto
-	ugi, _ := yarnauth.CreateSimpleUGIProto()
-	ipcCtxProto := hadoop_common.IpcConnectionContextProto{UserInfo: ugi, Protocol: &connectionId.protocol}
+	// TODO fix me
+	// ugiProto := &hadoop_common.UserInformationProto{}
+	// if c.UGI != nil {
+	// 	if authMethod == yarnauth.AUTH_KERBEROS {
+	// 		// Real user was established as part of the connection.
+	// 		// Send effective user only.
+	// 		effectiveUser := c.UGI.GetEffectiveUser()
+	// 		ugiProto.EffectiveUser = &effectiveUser
+	// 	} else if authMethod == yarnauth.AUTH_TOKEN {
+	// 		// With token, the connection itself establishes
+	// 		// both real and effective user. Hence send none in header
+	// 	} else { // Simple authentication
+	// 		// No user info is established as part of the connection.
+	// 		// Send both effective user and real user
+	// 		effectiveUser := c.UGI.GetEffectiveUser()
+	// 		ugiProto.EffectiveUser = &effectiveUser
+	// 		if realUser := c.UGI.GetRealUser(); realUser != "" {
+	// 			ugiProto.RealUser = &realUser
+	// 		}
+	// 	}
+	// }
+	ugiProto, _ := yarnauth.CreateSimpleUGIProto()
+	ipcCtxProto := hadoop_common.IpcConnectionContextProto{Protocol: &connectionId.protocol}
+	ipcCtxProto.UserInfo = ugiProto
 
 	// Create RpcRequestHeaderProto
-	var callId int32 = -3
 	var clientId [16]byte = [16]byte(*c.ClientId)
 
-	/*if (authProtocol == yarnauth.AUTH_PROTOCOL_SASL) {
-	  callId = SASL_RPC_CALL_ID
-	}*/
-
-	rpcReqHeaderProto := hadoop_common.RpcRequestHeaderProto{RpcKind: &yarnauth.RPC_PROTOCOL_BUFFFER, RpcOp: &yarnauth.RPC_FINAL_PACKET, CallId: &callId, ClientId: clientId[0:16], RetryCount: &yarnauth.RPC_DEFAULT_RETRY_COUNT}
+	rpcReqHeaderProto := hadoop_common.RpcRequestHeaderProto{
+		RpcKind:    &yarnauth.RPC_PROTOCOL_BUFFFER,
+		RpcOp:      &yarnauth.RPC_FINAL_PACKET,
+		CallId:     &CONNECTION_CONTEXT_CALL_ID,
+		ClientId:   clientId[0:16],
+		RetryCount: &yarnauth.RPC_DEFAULT_RETRY_COUNT,
+	}
 
 	rpcReqHeaderProtoBytes, err := proto.Marshal(&rpcReqHeaderProto)
 	if err != nil {
@@ -327,7 +488,13 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 
 	// 0. RpcRequestHeaderProto
 	var clientId [16]byte = [16]byte(*c.ClientId)
-	rpcReqHeaderProto := hadoop_common.RpcRequestHeaderProto{RpcKind: &yarnauth.RPC_PROTOCOL_BUFFFER, RpcOp: &yarnauth.RPC_FINAL_PACKET, CallId: &rpcCall.callId, ClientId: clientId[0:16], RetryCount: &rpcCall.retryCount}
+	rpcReqHeaderProto := hadoop_common.RpcRequestHeaderProto{
+		RpcKind:    &yarnauth.RPC_PROTOCOL_BUFFFER,
+		RpcOp:      &yarnauth.RPC_FINAL_PACKET,
+		CallId:     &rpcCall.callId,
+		ClientId:   clientId[0:16],
+		RetryCount: &rpcCall.retryCount,
+	}
 	rpcReqHeaderProtoBytes, err := proto.Marshal(&rpcReqHeaderProto)
 	if err != nil {
 		klog.Warningf("proto.Marshal(&rpcReqHeaderProto) %v", err)
@@ -375,7 +542,7 @@ func sendRequest(c *Client, conn *connection, rpcCall *call) error {
 		return err
 	}
 
-	klog.V(5).Infof("Succesfully sent request of length: ", totalLength)
+	klog.V(5).Infof("Succesfully sent request of length: %v", totalLength)
 
 	return nil
 }
@@ -438,7 +605,7 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 
 	err = c.checkRpcHeader(&rpcResponseHeaderProto)
 	if err != nil {
-		klog.Warningf("c.checkRpcHeader failed %v", err)
+		klog.Warningf("c.checkRpcHeader failed %v, rpc header %+v", err, &rpcResponseHeaderProto)
 		return err
 	}
 
@@ -447,7 +614,11 @@ func (c *Client) readResponse(conn *connection, rpcCall *call) error {
 		_, err = readDelimited(responseBytes[off:], rpcCall.response)
 	} else {
 		klog.V(4).Infof("RPC failed with status: %v", rpcResponseHeaderProto.Status.String())
-		errorDetails := [4]string{rpcResponseHeaderProto.Status.String(), "ServerDidNotSetExceptionClassName", "ServerDidNotSetErrorMsg", "ServerDidNotSetErrorDetail"}
+		errorDetails := [4]string{
+			rpcResponseHeaderProto.Status.String(),
+			"ServerDidNotSetExceptionClassName",
+			"ServerDidNotSetErrorMsg",
+			"ServerDidNotSetErrorDetail"}
 		if rpcResponseHeaderProto.ExceptionClassName != nil {
 			errorDetails[0] = *rpcResponseHeaderProto.ExceptionClassName
 		}
@@ -484,18 +655,20 @@ func (c *Client) checkRpcHeader(rpcResponseHeaderProto *hadoop_common.RpcRespons
 	if rpcResponseHeaderProto.ClientId != nil {
 		if !bytes.Equal(callClientId[0:16], headerClientId[0:16]) {
 			klog.Warningf("Incorrect clientId: %v", headerClientId)
-			return errors.New("Incorrect clientId")
+			return errors.New("incorrect clientId")
 		}
 	}
 	return nil
 }
 
-func sendSaslMessage(c *Client, conn *connection, message *hadoop_common.RpcSaslProto) error {
-	saslRpcHeaderProto := hadoop_common.RpcRequestHeaderProto{RpcKind: &yarnauth.RPC_PROTOCOL_BUFFFER,
+func sendSaslMessage(conn *connection, message *hadoop_common.RpcSaslProto) error {
+	saslRpcHeaderProto := hadoop_common.RpcRequestHeaderProto{
+		RpcKind:    &yarnauth.RPC_PROTOCOL_BUFFFER,
 		RpcOp:      &yarnauth.RPC_FINAL_PACKET,
 		CallId:     &SASL_RPC_CALL_ID,
 		ClientId:   SASL_RPC_DUMMY_CLIENT_ID,
-		RetryCount: &SASL_RPC_INVALID_RETRY_COUNT}
+		RetryCount: &SASL_RPC_INVALID_RETRY_COUNT,
+	}
 
 	saslRpcHeaderProtoBytes, err := proto.Marshal(&saslRpcHeaderProto)
 
@@ -537,7 +710,7 @@ func sendSaslMessage(c *Client, conn *connection, message *hadoop_common.RpcSasl
 	return nil
 }
 
-func receiveSaslMessage(c *Client, conn *connection) (*hadoop_common.RpcSaslProto, error) {
+func receiveSaslMessage(conn *connection) (*hadoop_common.RpcSaslProto, error) {
 	// Read first 4 bytes to get total-length
 	var totalLength int32 = -1
 	var totalLengthBytes [4]byte
@@ -608,87 +781,71 @@ func checkSaslRpcHeader(rpcResponseHeaderProto *hadoop_common.RpcResponseHeaderP
 	if rpcResponseHeaderProto.ClientId != nil {
 		if !bytes.Equal(SASL_RPC_DUMMY_CLIENT_ID, headerClientId) {
 			klog.Warningf("Incorrect clientId: %v", headerClientId)
-			return errors.New("Incorrect clientId")
+			return errors.New("incorrect clientId")
 		}
 	}
 	return nil
 }
 
-func negotiateSimpleTokenAuth(client *Client, con *connection) error {
-	var saslNegotiateState hadoop_common.RpcSaslProto_SaslState = hadoop_common.RpcSaslProto_NEGOTIATE
-	var saslNegotiateMessage hadoop_common.RpcSaslProto = hadoop_common.RpcSaslProto{State: &saslNegotiateState}
-	var saslResponseMessage *hadoop_common.RpcSaslProto
-	var err error
+func createSaslReply(state hadoop_common.RpcSaslProto_SaslState, token []byte) *hadoop_common.RpcSaslProto {
+	return &hadoop_common.RpcSaslProto{
+		State: &state,
+		Token: token,
+	}
+}
 
-	//send a SASL negotiation request
-	if err = sendSaslMessage(client, con, &saslNegotiateMessage); err != nil {
-		klog.Warningf("failed to send SASL NEGOTIATE message!")
-		return err
+// TODO implement this
+func isValidAuthType(auth *hadoop_common.RpcSaslProto_SaslAuth) bool {
+	return true
+}
+
+func selectSaslClient(client *Client, auths []*hadoop_common.RpcSaslProto_SaslAuth) (*hadoop_common.RpcSaslProto_SaslAuth, SASLClient, error) {
+	var selectedAuth *hadoop_common.RpcSaslProto_SaslAuth
+	var saslClient SASLClient
+	var switchToSimple bool
+
+	for _, auth := range auths {
+		if !isValidAuthType(auth) {
+			continue
+		}
+
+		authMethod := yarnauth.ConvertAuthProtoToAuthMethod(auth)
+		if authMethod == yarnauth.AUTH_SIMPLE {
+			switchToSimple = true
+		} else {
+			saslClient = createSaslClient(client, auth, authMethod)
+			if saslClient == nil {
+				continue
+			}
+		}
+		selectedAuth = auth
+		break
 	}
 
-	//get a response with supported mehcanisms/challenge
-	if saslResponseMessage, err = receiveSaslMessage(client, con); err != nil {
-		klog.Warningf("failed to receive SASL NEGOTIATE response!")
-		return err
+	if saslClient == nil && !switchToSimple {
+		return nil, nil, fmt.Errorf("client cannot authenticate via %v", auths)
+	}
+	return selectedAuth, saslClient, nil
+}
+
+func createSaslClient(c *Client, auth *hadoop_common.RpcSaslProto_SaslAuth, authMethod yarnauth.AuthMethod) SASLClient {
+	switch authMethod {
+	case yarnauth.AUTH_KERBEROS:
+		keytabFilePath := c.UGI.GetKeytabFilePath()
+		principal := c.UGI.GetPrincipal()
+		return CreateKerberosClient(keytabFilePath, principal)
+	case yarnauth.AUTH_TOKEN:
+		token, found := findUsableTokenForService(c.ServerAddress)
+		if !found {
+			klog.Info("not found token")
+			return nil
+		}
+		return CreateTokenAuth(token, auth)
 	}
 
-	var auths []*hadoop_common.RpcSaslProto_SaslAuth = saslResponseMessage.GetAuths()
+	return nil
+}
 
-	if numAuths := len(auths); numAuths <= 0 {
-		klog.Warningf("No supported auth mechanisms!")
-		return errors.New("No supported auth mechanisms!")
-	}
-
-	//for now we only support auth when TOKEN/DIGEST-MD5 is the first/only
-	//supported auth mechanism
-	var auth *hadoop_common.RpcSaslProto_SaslAuth = auths[0]
-
-	if !(auth.GetMethod() == "TOKEN" && auth.GetMechanism() == "DIGEST-MD5") {
-		klog.Warningf("yarnauth only supports TOKEN/DIGEST-MD5 auth!")
-		return errors.New("yarnauth only supports TOKEN/DIGEST-MD5 auth!")
-	}
-
-	method := auth.GetMethod()
-	mechanism := auth.GetMechanism()
-	protocol := auth.GetProtocol()
-	serverId := auth.GetServerId()
-	challenge := auth.GetChallenge()
-
-	//TODO: token/service mapping + token selection based on type/service
-	//we wouldn't have gotten this far if there wasn't at least one available token.
-	userToken, _ := findUsableTokenForService(client.ServerAddress)
-	response, err := security.GetDigestMD5ChallengeResponse(protocol, serverId, challenge, userToken)
-
-	if err != nil {
-		klog.Warningf("failed to get challenge response! %v", err)
-		return err
-	}
-
-	saslInitiateState := hadoop_common.RpcSaslProto_INITIATE
-	authSend := hadoop_common.RpcSaslProto_SaslAuth{Method: &method, Mechanism: &mechanism,
-		Protocol: &protocol, ServerId: &serverId}
-	authsSendArray := []*hadoop_common.RpcSaslProto_SaslAuth{&authSend}
-	saslInitiateMessage := hadoop_common.RpcSaslProto{State: &saslInitiateState,
-		Token: []byte(response), Auths: authsSendArray}
-
-	//send a SASL inititate request
-	if err = sendSaslMessage(client, con, &saslInitiateMessage); err != nil {
-		klog.Warningf("failed to send SASL INITIATE message!")
-		return err
-	}
-
-	//get a response with supported mehcanisms/challenge
-	if saslResponseMessage, err = receiveSaslMessage(client, con); err != nil {
-		klog.Warningf("failed to read response to SASL INITIATE response!")
-		return err
-	}
-
-	if saslResponseMessage.GetState() != hadoop_common.RpcSaslProto_SUCCESS {
-		klog.Warningf("expected SASL SUCCESS response!")
-		return errors.New("expected SASL SUCCESS response!")
-	}
-
-	klog.V(4).Infof("Successfully completed SASL negotiation!")
-
-	return nil //errors.New("abort here")
+type SASLClient interface {
+	EvaluateChallenge([]byte) ([]byte, error)
 }

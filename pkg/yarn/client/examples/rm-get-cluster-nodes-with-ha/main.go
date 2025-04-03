@@ -33,8 +33,16 @@ func main() {
 	response, err := yarnClient.GetClusterNodes(request)
 
 	if err != nil {
-		log.Fatal("GetClusterNode ", err)
+		log.Fatalf("failed: GetClusterNode %v", err)
 	}
 
-	log.Printf("GetClusterNode response %v", response)
+	log.Printf("success: GetClusterNode response %+v", response)
+
+	for _, nodereport := range response.NodeReports {
+		log.Printf("node %+v\n", nodereport)
+		log.Printf("used %s\n", *nodereport.HttpAddress)
+		log.Printf("used virtual cpu %d\n", *nodereport.Used.VirtualCores)
+		log.Printf("used memory %d\n", *nodereport.Used.Memory)
+		log.Printf("used resource map %+v\n", nodereport.Used.ResourceValueMap)
+	}
 }

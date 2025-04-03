@@ -50,15 +50,31 @@ const (
 	AUTH_PLAIN    AuthMethod = 0x53
 )
 
-func (authmethod AuthMethod) String() string {
+func ConvertAuthProtoToAuthMethod(authProto *hadoop_common.RpcSaslProto_SaslAuth) AuthMethod {
+	method := authProto.GetMethod()
+	mechanism := authProto.GetMechanism()
+
 	switch {
-	case authmethod == AUTH_SIMPLE:
+	case method == "TOKEN" && mechanism == "DIGEST-MD5":
+		return AUTH_TOKEN
+	case method == "KERBEROS" && mechanism == "GSSAPI":
+		return AUTH_KERBEROS
+	case method == "PLAIN":
+		return AUTH_PLAIN
+	}
+
+	return AUTH_SIMPLE
+}
+
+func (authmethod AuthMethod) String() string {
+	switch authmethod {
+	case AUTH_SIMPLE:
 		return "SIMPLE"
-	case authmethod == AUTH_KERBEROS:
+	case AUTH_KERBEROS:
 		return "GSSAPI"
-	case authmethod == AUTH_TOKEN:
+	case AUTH_TOKEN:
 		return "DIGEST-MD5"
-	case authmethod == AUTH_PLAIN:
+	case AUTH_PLAIN:
 		return "PLAIN"
 	}
 	return "ERROR-UNKNOWN"
@@ -72,10 +88,10 @@ const (
 )
 
 func (authprotocol AuthProtocol) String() string {
-	switch {
-	case authprotocol == AUTH_PROTOCOL_NONE:
+	switch authprotocol {
+	case AUTH_PROTOCOL_NONE:
 		return "NONE"
-	case authprotocol == AUTH_PROTOCOL_SASL:
+	case AUTH_PROTOCOL_SASL:
 		return "SASL"
 	}
 	return "ERROR-UNKNOWN"
