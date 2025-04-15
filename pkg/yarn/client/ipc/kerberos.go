@@ -1,4 +1,6 @@
 /*
+Copyright (c) 2013 Shopify
+Copyright (c) 2023 IBM Corporation
 Copyright 2013 The Cloudera Inc.
 Copyright 2023 The Koordinator Authors.
 
