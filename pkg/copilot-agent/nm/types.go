@@ -39,6 +39,14 @@ type YarnContainer struct {
 	ContainerLogFiles   []string `json:"containerLogFiles"`
 }
 
+type ContainerId struct {
+	ID          string
+	ClusterTS   int64
+	AppID       int64
+	AttemptID   int
+	ContainerID int
+}
+
 func (c *YarnContainer) IsFinalState() bool {
 	for _, state := range FinalContainerStates {
 		if c.State == state {

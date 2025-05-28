@@ -38,7 +38,16 @@ const (
 	MemoryMoveChargeAtImmigrateName = "memory.move_charge_at_immigrate"
 )
 
-type NodeMangerOperator struct {
+type NodeMangerOperator interface {
+	Run(stop <-chan struct{}) error
+	KillContainer(containerID string) error
+	ListContainers() (*Containers, error)
+	GetContainer(containerID string) (*YarnContainer, error)
+	GenerateCgroupPath(containerID string) string
+	GenerateCgroupFullPath(cgroupSubSystem string) string
+}
+
+type nodeMangerOperator struct {
 	CgroupRoot string
 	CgroupPath string
 
@@ -52,7 +61,7 @@ type NodeMangerOperator struct {
 	nmTicker       *time.Ticker
 }
 
-func NewNodeMangerOperator(cgroupRoot string, cgroupPath string, syncMemoryCgroup bool, endpoint string, syncPeriod time.Duration, kubelet statesinformer.KubeletStub) (*NodeMangerOperator, error) {
+func NewNodeMangerOperator(cgroupRoot string, cgroupPath string, syncMemoryCgroup bool, endpoint string, syncPeriod time.Duration, kubelet statesinformer.KubeletStub) (NodeMangerOperator, error) {
 	watcher, err := pleg.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -60,7 +69,7 @@ func NewNodeMangerOperator(cgroupRoot string, cgroupPath string, syncMemoryCgrou
 	cli := resty.New()
 	cli.SetBaseURL(fmt.Sprintf("http://%s", endpoint))
 	w := NewNMPodWater(kubelet)
-	return &NodeMangerOperator{
+	operator := &nodeMangerOperator{
 		CgroupRoot:       cgroupRoot,
 		CgroupPath:       cgroupPath,
 		SyncMemoryCgroup: syncMemoryCgroup,
@@ -70,10 +79,11 @@ func NewNodeMangerOperator(cgroupRoot string, cgroupPath string, syncMemoryCgrou
 		nmPodWatcher:     w,
 		ticker:           time.NewTicker(syncPeriod),
 		nmTicker:         time.NewTicker(time.Second),
-	}, nil
+	}
+	return operator, nil
 }
 
-func (n *NodeMangerOperator) Run(stop <-chan struct{}) error {
+func (n *nodeMangerOperator) Run(stop <-chan struct{}) error {
 	klog.Infof("Run node manager operator")
 	if n.SyncMemoryCgroup {
 		return n.syncMemoryCgroup(stop)
@@ -81,7 +91,7 @@ func (n *NodeMangerOperator) Run(stop <-chan struct{}) error {
 	return nil
 }
 
-func (n *NodeMangerOperator) syncMemoryCgroup(stop <-chan struct{}) error {
+func (n *nodeMangerOperator) syncMemoryCgroup(stop <-chan struct{}) error {
 	cpuDir := filepath.Join(n.CgroupRoot, system.CgroupCPUDir, n.CgroupPath)
 	if err := n.ensureCgroupDir(cpuDir); err != nil {
 		klog.Error(err)
@@ -119,7 +129,7 @@ func (n *NodeMangerOperator) syncMemoryCgroup(stop <-chan struct{}) error {
 	}
 }
 
-func (n *NodeMangerOperator) syncNoneProcCgroup() {
+func (n *nodeMangerOperator) syncNoneProcCgroup() {
 	klog.V(5).Info("syncNoneProcCgroup")
 	cpuPath := n.GenerateCgroupFullPath(system.CgroupCPUDir)
 	_ = filepath.Walk(cpuPath, func(path string, info os.FileInfo, err error) error {
@@ -147,7 +157,7 @@ func (n *NodeMangerOperator) syncNoneProcCgroup() {
 	})
 }
 
-func (n *NodeMangerOperator) syncNMEndpoint() {
+func (n *nodeMangerOperator) syncNMEndpoint() {
 	endpoint, exist, err := n.nmPodWatcher.GetNMPodEndpoint()
 	if err != nil {
 		klog.Error(err)
@@ -163,7 +173,7 @@ func (n *NodeMangerOperator) syncNMEndpoint() {
 	}
 }
 
-func (n *NodeMangerOperator) syncAllCgroup() {
+func (n *nodeMangerOperator) syncAllCgroup() {
 	subDirFunc := func(dir string) map[string]struct{} {
 		res := map[string]struct{}{}
 		_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
@@ -190,7 +200,7 @@ func (n *NodeMangerOperator) syncAllCgroup() {
 	}
 }
 
-func (n *NodeMangerOperator) syncParentCgroup() error {
+func (n *nodeMangerOperator) syncParentCgroup() error {
 	containers, err := n.ListContainers()
 	if err != nil {
 		klog.Error(err)
@@ -214,7 +224,7 @@ func (n *NodeMangerOperator) syncParentCgroup() error {
 	return nil
 }
 
-func (n *NodeMangerOperator) removeMemoryCgroup(fileName string) {
+func (n *nodeMangerOperator) removeMemoryCgroup(fileName string) {
 	klog.V(5).Infof("receive file delete event %s", fileName)
 	basename := filepath.Base(fileName)
 	if !strings.HasPrefix(basename, "container_") {
@@ -229,7 +239,7 @@ func (n *NodeMangerOperator) removeMemoryCgroup(fileName string) {
 	klog.V(5).Infof("yarn container dir %v removed", basename)
 }
 
-func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
+func (n *nodeMangerOperator) createMemoryCgroup(fileName string) {
 	klog.V(5).Infof("receive file create event %s", fileName)
 	basename := filepath.Base(fileName)
 	if !strings.HasPrefix(basename, "container_") {
@@ -277,7 +287,7 @@ func (n *NodeMangerOperator) createMemoryCgroup(fileName string) {
 	klog.V(5).Infof("set memory %s limit_in_bytes as %d", memCgroupPath, memLimit)
 }
 
-func (n *NodeMangerOperator) ensureCgroupDir(dir string) error {
+func (n *nodeMangerOperator) ensureCgroupDir(dir string) error {
 	klog.V(5).Infof("ensure cgroup dir %s", dir)
 	f, err := os.Stat(dir)
 	if err != nil && !os.IsNotExist(err) {
@@ -296,7 +306,7 @@ func (n *NodeMangerOperator) ensureCgroupDir(dir string) error {
 }
 
 // KillContainer kill process group for target container
-func (n *NodeMangerOperator) KillContainer(containerID string) error {
+func (n *nodeMangerOperator) KillContainer(containerID string) error {
 	processGroupID := n.getProcessGroupID(containerID)
 	if processGroupID <= 1 {
 		return fmt.Errorf("invalid process group pid(%d) for container %s", processGroupID, containerID)
@@ -304,7 +314,7 @@ func (n *NodeMangerOperator) KillContainer(containerID string) error {
 	return syscall.Kill(-processGroupID, syscall.SIGKILL)
 }
 
-func (n *NodeMangerOperator) getProcessGroupID(containerID string) int {
+func (n *nodeMangerOperator) getProcessGroupID(containerID string) int {
 	containerCgroupPath := filepath.Join(n.CgroupRoot, "cpu", n.CgroupPath, containerID)
 	pids, err := utils.GetPids(containerCgroupPath)
 	if err != nil {
@@ -323,7 +333,7 @@ type Containers struct {
 	} `json:"containers"`
 }
 
-func (n *NodeMangerOperator) ListContainers() (*Containers, error) {
+func (n *nodeMangerOperator) ListContainers() (*Containers, error) {
 	var res Containers
 	resp, err := n.client.R().SetResult(&res).Get("/ws/v1/node/containers")
 	if err != nil {
@@ -335,7 +345,7 @@ func (n *NodeMangerOperator) ListContainers() (*Containers, error) {
 	return &res, nil
 }
 
-func (n *NodeMangerOperator) GetContainer(containerID string) (*YarnContainer, error) {
+func (n *nodeMangerOperator) GetContainer(containerID string) (*YarnContainer, error) {
 	listContainers, err := n.ListContainers()
 	if err != nil {
 		return nil, err
@@ -348,10 +358,10 @@ func (n *NodeMangerOperator) GetContainer(containerID string) (*YarnContainer, e
 	return nil, fmt.Errorf("container Not Found")
 }
 
-func (n *NodeMangerOperator) GenerateCgroupPath(containerID string) string {
+func (n *nodeMangerOperator) GenerateCgroupPath(containerID string) string {
 	return filepath.Join(n.CgroupPath, containerID)
 }
 
-func (n *NodeMangerOperator) GenerateCgroupFullPath(cgroupSubSystem string) string {
+func (n *nodeMangerOperator) GenerateCgroupFullPath(cgroupSubSystem string) string {
 	return filepath.Join(n.CgroupRoot, cgroupSubSystem, n.CgroupPath)
 }

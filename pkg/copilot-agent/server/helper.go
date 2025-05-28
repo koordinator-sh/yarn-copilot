@@ -17,13 +17,14 @@ limitations under the License.
 package server
 
 import (
+	"github.com/koordinator-sh/koordinator/apis/extension"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/koordinator-sh/yarn-copilot/pkg/copilot-agent/nm"
 )
 
-func ParseContainerInfo(yarnContainer *nm.YarnContainer, op *nm.NodeMangerOperator) *ContainerInfo {
+func ParseContainerInfo(yarnContainer *nm.YarnContainer, op nm.NodeMangerOperator) *ContainerInfo {
 	return &ContainerInfo{
 		Name:        yarnContainer.Id,
 		Namespace:   "yarn",
@@ -33,12 +34,12 @@ func ParseContainerInfo(yarnContainer *nm.YarnContainer, op *nm.NodeMangerOperat
 		Priority:    1,
 		Resources: corev1.ResourceRequirements{
 			Limits: map[corev1.ResourceName]resource.Quantity{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(int64(yarnContainer.TotalVCoresNeeded*1000), resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewMilliQuantity(int64(yarnContainer.TotalMemoryNeededMB*1024*1024*1000), resource.DecimalSI),
+				extension.BatchCPU:    *resource.NewMilliQuantity(int64(yarnContainer.TotalVCoresNeeded*1000), resource.DecimalSI),
+				extension.BatchMemory: *resource.NewMilliQuantity(int64(yarnContainer.TotalMemoryNeededMB*1024*1024*1000), resource.DecimalSI),
 			},
 			Requests: map[corev1.ResourceName]resource.Quantity{
-				corev1.ResourceCPU:    *resource.NewMilliQuantity(int64(yarnContainer.TotalVCoresNeeded*1000), resource.DecimalSI),
-				corev1.ResourceMemory: *resource.NewMilliQuantity(int64(yarnContainer.TotalMemoryNeededMB*1024*1024*1000), resource.DecimalSI),
+				extension.BatchCPU:    *resource.NewMilliQuantity(int64(yarnContainer.TotalVCoresNeeded*1000), resource.DecimalSI),
+				extension.BatchMemory: *resource.NewMilliQuantity(int64(yarnContainer.TotalMemoryNeededMB*1024*1024*1000), resource.DecimalSI),
 			},
 		},
 	}

@@ -18,7 +18,9 @@ package main
 
 import (
 	"flag"
+	"k8s.io/client-go/rest"
 	"os"
+	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"time"
 
 	statesinformer "github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer/impl"
@@ -53,7 +55,11 @@ func main() {
 		klog.Infof("args: %s = %s", f.Name, f.Value)
 	})
 	stopCtx := signals.SetupSignalHandler()
-	kubelet, _ := statesinformer.NewKubeletStub("127.0.0.1", 10255, "http", time.Second*5, nil)
+	restConfig, err := initRestConfig()
+	if err != nil {
+		klog.Fatal(err)
+	}
+	kubelet, _ := statesinformer.NewKubeletStub("127.0.0.1", 10250, "https", time.Second*5, restConfig)
 	operator, err := nm.NewNodeMangerOperator(conf.CgroupRootDir, conf.YarnContainerCgroupPath, conf.SyncMemoryCgroup, conf.NodeMangerEndpoint, conf.SyncCgroupPeriod, kubelet)
 	if err != nil {
 		klog.Fatal(err)
@@ -67,4 +73,15 @@ func main() {
 	if err != nil {
 		klog.Fatal(err)
 	}
+}
+
+func initRestConfig() (*rest.Config, error) {
+	restConfig, err := config.GetConfig()
+	if err != nil {
+		return nil, err
+	}
+	restConfig.TLSClientConfig.Insecure = true
+	restConfig.TLSClientConfig.CAData = nil
+	restConfig.TLSClientConfig.CAFile = ""
+	return restConfig, nil
 }
