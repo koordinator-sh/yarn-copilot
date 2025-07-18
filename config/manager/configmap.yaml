@@ -45,6 +45,7 @@ data:
         <property>
             <name>yarn.resourcemanager.address.rm3</name>
             <value>0.0.0.0:8032</value>
+        </property>
     </configuration>
   core-site.xml: |
     <configuration>
