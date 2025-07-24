@@ -20,6 +20,7 @@ package auth
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
 	"os/user"
 	"runtime"
 	"strings"
@@ -103,15 +104,28 @@ func GetCalleeRPCRequestHeaderProto(protocolName *string) *hadoop_common.Request
 	return &hadoop_common.RequestHeaderProto{MethodName: &methodName, DeclaringClassProtocolName: protocolName, ClientProtocolVersion: &CLIENT_PROTOCOL_VERSION}
 }
 
+// This function first attempts to determine the real user by checking the "HADOOP_USER_NAME"
+// environment variable. If not set, it falls back to the current OS user.
+// If the "HADOOP_PROXY_USER" environment variable is set, it will be used as the effective
+// (proxy) user; otherwise, the effective user will be nil.
 func CreateSimpleUGIProto() (*hadoop_common.UserInformationProto, error) {
 	// Figure the current user-name
-	var username string
-	if user, err := user.Current(); err != nil {
-		klog.Warningf("user.Current", err)
-		return nil, err
-	} else {
-		username = user.Username
+	username := os.Getenv("HADOOP_USER_NAME")
+	if username == "" {
+		userInfo, err := user.Current()
+		if err != nil {
+			klog.Warningf("user.Current", err)
+			return nil, err
+		}
+		username = userInfo.Username
 	}
 
-	return &hadoop_common.UserInformationProto{EffectiveUser: nil, RealUser: &username}, nil
+	var effectiveUser *string
+	if proxyName := os.Getenv("HADOOP_PROXY_USER"); proxyName != "" {
+		effectiveUser = &proxyName
+	} else {
+		effectiveUser = nil
+	}
+
+	return &hadoop_common.UserInformationProto{EffectiveUser: effectiveUser, RealUser: &username}, nil
 }
