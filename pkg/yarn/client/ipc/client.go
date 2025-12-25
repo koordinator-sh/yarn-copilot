@@ -20,6 +20,7 @@ package ipc
 import (
 	"bufio"
 	"bytes"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -163,6 +164,9 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 		klog.V(4).Infof("found token for service: %s", c.ServerAddress)
 		authProtocol = yarnauth.AUTH_PROTOCOL_SASL
 	}
+	if IsEnableKerberos() {
+		authProtocol = yarnauth.AUTH_PROTOCOL_SASL
+	}
 
 	err = writeConnectionHeader(con, authProtocol)
 	if err != nil {
@@ -170,11 +174,18 @@ func getConnection(c *Client, connectionId *connection_id) (*connection, error) 
 	}
 
 	if authProtocol == yarnauth.AUTH_PROTOCOL_SASL {
-		klog.V(4).Infof("attempting SASL negotiation.")
-
-		if err = negotiateSimpleTokenAuth(c, con); err != nil {
-			klog.Warningf("failed to complete SASL negotiation!")
-			return nil, err
+		if IsEnableKerberos() {
+			klog.Infof("will negotiate kerberos auth")
+			if err := negotiateKerberosAuth(c, con); err != nil {
+				con.con.Close()
+				klog.Errorf("failed to negotiate kerberos auth: %v", err)
+				return nil, err
+			}
+		} else {
+			if err := negotiateSimpleTokenAuth(c, con); err != nil {
+				con.con.Close()
+				return nil, err
+			}
 		}
 
 	} else {
@@ -479,13 +490,18 @@ func readDelimited(rawData []byte, msg proto.Message) (int, error) {
 }
 
 func (c *Client) checkRpcHeader(rpcResponseHeaderProto *hadoop_common.RpcResponseHeaderProto) error {
+	if rpcResponseHeaderProto.GetStatus() != hadoop_common.RpcResponseHeaderProto_SUCCESS {
+		return nil
+	}
+
+	headerClientId := rpcResponseHeaderProto.ClientId
+	if headerClientId == nil || len(headerClientId) < 16 {
+		return errors.New("invalid or missing clientId in RPC response")
+	}
+
 	var callClientId = [16]byte(*c.ClientId)
-	var headerClientId = rpcResponseHeaderProto.ClientId
-	if rpcResponseHeaderProto.ClientId != nil {
-		if !bytes.Equal(callClientId[0:16], headerClientId[0:16]) {
-			klog.Warningf("Incorrect clientId: %v", headerClientId)
-			return errors.New("Incorrect clientId")
-		}
+	if !bytes.Equal(callClientId[:], headerClientId[:16]) {
+		return errors.New("incorrect clientId")
 	}
 	return nil
 }
@@ -494,43 +510,33 @@ func sendSaslMessage(c *Client, conn *connection, message *hadoop_common.RpcSasl
 	saslRpcHeaderProto := hadoop_common.RpcRequestHeaderProto{RpcKind: &yarnauth.RPC_PROTOCOL_BUFFFER,
 		RpcOp:      &yarnauth.RPC_FINAL_PACKET,
 		CallId:     &SASL_RPC_CALL_ID,
-		ClientId:   SASL_RPC_DUMMY_CLIENT_ID,
+		ClientId:   (*c.ClientId)[:],
 		RetryCount: &SASL_RPC_INVALID_RETRY_COUNT}
 
 	saslRpcHeaderProtoBytes, err := proto.Marshal(&saslRpcHeaderProto)
-
 	if err != nil {
 		klog.Warningf("proto.Marshal(&saslRpcHeaderProto) %v", err)
 		return err
 	}
-
 	saslRpcMessageProtoBytes, err := proto.Marshal(message)
-
 	if err != nil {
 		klog.Warningf("proto.Marshal(saslMessage) %v", err)
 		return err
 	}
 
-	totalLength := len(saslRpcHeaderProtoBytes) + sizeVarint(len(saslRpcHeaderProtoBytes)) + len(saslRpcMessageProtoBytes) + sizeVarint(len(saslRpcMessageProtoBytes))
-	var tLen int32 = int32(totalLength)
-	if err := conn.con.SetDeadline(time.Now().Add(rwDefaultTimeout)); err != nil {
+	fullHeader := encodeDelimited(saslRpcHeaderProtoBytes)
+	fullMessage := encodeDelimited(saslRpcMessageProtoBytes)
+	totalLen := int32(len(fullHeader) + len(fullMessage))
+
+	lenBuf := make([]byte, 4)
+	binary.BigEndian.PutUint32(lenBuf, uint32(totalLen))
+	if _, err := conn.con.Write(lenBuf); err != nil {
 		return err
 	}
-	if totalLengthBytes, err := yarnauth.ConvertFixedToBytes(tLen); err != nil {
-		klog.Warningf("ConvertFixedToBytes(totalLength) %v", err)
-		return err
-	} else {
-		if _, err := conn.con.Write(totalLengthBytes); err != nil {
-			klog.Warningf("conn.con.Write(totalLengthBytes) %v", err)
-			return err
-		}
-	}
-	if err := writeDelimitedBytes(conn, saslRpcHeaderProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, saslRpcHeaderProtoBytes) %v", err)
+	if _, err := conn.con.Write(fullHeader); err != nil {
 		return err
 	}
-	if err := writeDelimitedBytes(conn, saslRpcMessageProtoBytes); err != nil {
-		klog.Warningf("writeDelimitedBytes(conn, saslRpcMessageProtoBytes) %v", err)
+	if _, err := conn.con.Write(fullMessage); err != nil {
 		return err
 	}
 
@@ -556,9 +562,8 @@ func receiveSaslMessage(c *Client, conn *connection) (*hadoop_common.RpcSaslProt
 	}
 
 	var responseBytes []byte = make([]byte, totalLength)
-
-	if _, err := conn.con.Read(responseBytes); err != nil {
-		klog.Warningf("conn.con.Read(totalLengthBytes) %v", err)
+	if _, err := io.ReadFull(conn.con, responseBytes); err != nil {
+		klog.Warningf("failed to read full sasl response: %v", err)
 		return nil, err
 	}
 
@@ -691,4 +696,10 @@ func negotiateSimpleTokenAuth(client *Client, con *connection) error {
 	klog.V(4).Infof("Successfully completed SASL negotiation!")
 
 	return nil //errors.New("abort here")
+}
+
+func encodeDelimited(data []byte) []byte {
+	prefix := make([]byte, binary.MaxVarintLen64)
+	n := binary.PutUvarint(prefix, uint64(len(data)))
+	return append(prefix[:n], data...)
 }
