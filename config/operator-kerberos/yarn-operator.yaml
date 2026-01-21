@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: koord-yarn-operator
+  namespace: arco-system
+  labels:
+    koord-app: koord-yarn-operator
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      koord-app: koord-yarn-operator
+  strategy:
+    rollingUpdate:
+      maxSurge: 100%
+      maxUnavailable: 0
+    type: RollingUpdate
+  template:
+    metadata:
+      labels:
+        koord-app: koord-yarn-operator
+    spec:
+      containers:
+        - args:
+            - --enable-leader-election
+            - --metrics-addr=:8080
+            - --logtostderr=true
+            - --leader-election-namespace=arco-system
+            - --v=4
+            - --sync-period=0
+          command:
+            - /koord-yarn-operator
+          image: reg.docker.alibaba-inc.com/antkoord/yarn-operator:20251225141615_kerberos_4791c306
+          imagePullPolicy: IfNotPresent
+          name: yarn-operator
+          env:
+            - name: HADOOP_CONF_DIR
+              value: /etc/hadoop-conf
+            - name: ENABLE_KERBEROS
+              value: "true"
+            - name: KRB5_CLIENT_USERNAME
+              value: yarn-operator
+            - name: KRB5_CLIENT_REALM
+              value: EXAMPLE.COM
+            - name: KRB5_CONF_PATH
+              value: /etc/krb5.conf
+            - name: KRB5_KEYTAB_PATH
+              value: /etc/security/keytabs/yarn.keytab
+          ports:
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /metrics
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+          startupProbe:
+            httpGet:
+              path: /metrics
+              port: 8080
+            failureThreshold: 30
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 1000m
+              memory: 1Gi
+            requests:
+              cpu: 500m
+              memory: 256Mi
+          volumeMounts:
+            - name: yarn-config-volume
+              mountPath: /etc/hadoop-conf
+            - name: kerberos-config
+              mountPath: /etc/krb5.conf
+              subPath: krb5.conf
+            - name: yarn-keytab
+              mountPath: /etc/security/keytabs/yarn.keytab
+              subPath: yarn.keytab
+      volumes:
+        - name: yarn-config-volume
+          configMap:
+            name: yarn-config
+        - name: kerberos-config
+          configMap:
+            name: kerberos-config
+            items:
+              - key: krb5.conf
+                path: krb5.conf
+        - name: yarn-keytab
+          secret:
+            secretName: yarn-operator-keytab
+      hostNetwork: false
+      terminationGracePeriodSeconds: 10
+      restartPolicy: Always
+      serviceAccountName: koord-yarn-operator
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: koord-app
+                      operator: In
+                      values:
+                        - koord-yarn-operator
+                topologyKey: kubernetes.io/hostname
+              weight: 100
