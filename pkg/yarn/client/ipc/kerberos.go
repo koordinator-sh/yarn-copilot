@@ -262,7 +262,7 @@ func generateGssapiKerberosToken(krb5Config KerberosConf, spn string) ([]byte, *
 	payload := append(oid, tokenID...)
 	payload = append(payload, apReqBytes...)
 
-	// 构造 Application Construct Tag (0x60)
+	// Build Application Construct Tag (0x60)
 	var finalToken []byte
 	finalToken = append(finalToken, 0x60)
 	finalToken = append(finalToken, encodeASN1Length(len(payload))...)
