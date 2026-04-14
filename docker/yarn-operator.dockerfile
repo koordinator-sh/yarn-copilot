@@ -11,7 +11,7 @@ COPY pkg/ pkg/
 
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -o koord-yarn-operator cmd/yarn-operator/main.go
 
-FROM alpine:3.16
+FROM alpine:3.18.12
 RUN apk add --update bash net-tools iproute2 logrotate less rsync util-linux lvm2
 WORKDIR /
 COPY --from=builder /go/src/github.com/koordinator-sh/yarn-copilot .
